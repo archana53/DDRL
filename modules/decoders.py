@@ -58,9 +58,7 @@ class MLPEnsembleHead(nn.Module):
             [MLPHead(in_channels, out_channels, hidden_channels1, hidden_channels2) for _ in range(n_models)]
         )
 
-    def forward(
-        self, x: torch.Tensor["batch", "in_channels", "height", "width"]
-    ) -> torch.Tensor["batch", "n_models", "out_channels", "height", "width"]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = [model(x) for model in self.ensemble]
         x = torch.stack(x, dim=1)
         return x
