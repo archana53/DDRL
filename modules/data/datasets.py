@@ -1,4 +1,5 @@
 import pathlib
+import json
 from typing import Tuple
 
 import albumentations as A
@@ -98,6 +99,90 @@ class CelebAHQMaskDataset(BaseTaskDataset):
         image = transformed["image"]
         label = transformed["mask"].long()
         return {"image": image, "label": label}
+
+    def __len__(self):
+        return len(self.images)
+
+
+class DepthDataset(BaseTaskDataset):
+    """Dataset class for single image facial depth estimation.
+    Returns a dict with keys "image" and "label" for the image and depth map respectively.
+    
+    Args:
+        root (pathlib.Path): Path to the root directory of the dataset.
+        size (Tuple[int, int], optional): Size of the image. Defaults to (256, 256).
+        mode (str, optional): Mode of the dataset. Must be one of (train, val, test). Defaults to "train".
+    """
+    def __init__(self, *args, **kwargs):
+        super(DepthDataset, self).__init__(*args, **kwargs)
+
+        self.image_subfolder = "image"
+        self.depth_subfolder = "depth"
+        self.images = sorted((self.root / self.image_subfolder).glob("*.jpg"))
+        self.depths = sorted((self.root / self.depth_subfolder).glob("*.png"))
+
+        if len(self.images) != len(self.depths):
+            raise ValueError(
+                f"Number of images and depths do not match. Found {len(self.images)} images and {len(self.depths)} depths."
+            )
+        
+    def __getitem__(self, idx):
+        image_path = self.images[idx]
+        image = Image.open(image_path)
+
+        depth_path = self.depths[idx]
+        depth = Image.open(image_path.parent.parent / self.depth_subfolder / depth_path).convert("L")
+
+        if self.mode == "train":
+            transformed = self.transforms(image=np.array(image), mask=np.array(depth))
+            image = transformed["image"]
+            depth = transformed["mask"]
+
+        transformed = self.to_tensor(image=np.array(image))
+        image = transformed["image"]
+        depth = (depth / 127.5 - 1).unsqueeze(2)
+        depth = ToTensorV2()(image=np.array(depth))["image"]
+        return {"image": image, "label": depth}
+    
+    def __len__(self):
+        return len(self.images)
+    
+
+class KeyPointDataset(BaseTaskDataset):
+    """Dataset class for single image facial keypoint estimation.
+    Returns a dict with keys "image" and "label" for the image and keypoint map respectively.
+    """
+    def __init__(self, *args, **kwargs):
+        super(KeyPointDataset, self).__init__(*args, **kwargs)
+
+        self.image_subfolder = "image"
+        self.keypoint_subfolder = "keypoint"
+        self.images = sorted((self.root / self.image_subfolder).glob("*.jpg"))
+        self.keypoints = sorted((self.root / self.keypoint_subfolder).glob("*.json"))
+
+        if len(self.images) != len(self.keypoints):
+            raise ValueError(
+                f"Number of images and keypoints do not match. Found {len(self.images)} images and {len(self.keypoints)} keypoints."
+            )
+        
+    def __getitem__(self, idx):
+        #TODO: test this
+        image_path = self.images[idx]
+        image = Image.open(image_path)
+
+        keypoint_path = self.keypoints[idx]
+        with open(keypoint_path) as json_file:
+            keypoint = json.load(json_file)
+
+        if self.mode == "train":
+            transformed = self.transforms(image=np.array(image), keypoint=keypoint["keypoints"])
+            image = transformed["image"]
+            keypoint = transformed["keypoint"]
+
+        transformed = self.to_tensor(image=np.array(image), keypoint=keypoint)
+        image = transformed["image"]
+        keypoint = transformed["keypoint"]
+        return {"image": image, "label": keypoint}
 
     def __len__(self):
         return len(self.images)
