@@ -10,6 +10,11 @@ from tqdm import tqdm
 class CelebAMaskPreprocessor:
     """CelebAMask-HQ Preprocessor class that converts raw masks to a single mask.
     Modified from https://github.com/zllrunning/face-parsing.PyTorch/blob/master/prepropess_data.py
+    
+    Args:
+        image_path (str): Path to the image directory.
+        source_mask_path (str): Path to the raw mask directory.
+        dest_mask_path (str): Path to the destination directory for the processed masks.
     """
 
     def __init__(self, image_path, source_mask_path, dest_mask_path):
