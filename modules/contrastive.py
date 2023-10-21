@@ -24,7 +24,7 @@ import torch.optim as optim
 
 ## Torchvision
 import torchvision
-from torchvision.datasets import STL10
+from torchvision.datasets import STL10,CIFAR10
 from torchvision import transforms
 
 # PyTorch Lightning
@@ -87,6 +87,10 @@ class ContrastiveLearning(pl.LightningModule):
     def info_nce_loss(self, batch, mode='train'):
         imgs, _ = batch
         imgs = torch.cat(imgs, dim=0)
+        imgs = torch.flatten(imgs, start_dim=1, end_dim=3)
+        imgs = imgs[:,:16]
+        print(imgs.shape)
+
 
         # Encode all images
         feats = self.forward(imgs)
@@ -172,9 +176,9 @@ def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kw
 
 
 if __name__ == '__main__':
-    unlabeled_data = STL10(root=DATASET_PATH, split='unlabeled', download=True,
+    unlabeled_data = CIFAR10(root=DATASET_PATH, train=True, download=True,
                        transform=ContrastiveTransformations(n_views=2))
-    train_data_contrast = STL10(root=DATASET_PATH, split='train', download=True,
+    train_data_contrast = CIFAR10(root=DATASET_PATH, train=False, download=True,
                                 transform=ContrastiveTransformations(n_views=2))
 
     # pl.seed_everything(42)
@@ -189,14 +193,14 @@ if __name__ == '__main__':
     # plt.axis('off')
     # plt.show()
     # plt.close()
-    clr_model = train_cl(batch_size=256,
+    clr_model = train_cl(batch_size=2,
                         unlabeled_data = unlabeled_data,
                         train_data_contrast = train_data_contrast,
-                        in_channels=1024,
-                        out_channels = 128,
+                        in_channels=16,
+                        out_channels = 16,
                         lr=5e-4,
                         temperature=0.07,
                         weight_decay=1e-4,
                         max_epochs=500,
-                        hidden_channels1=256,
-                        hidden_channels2=128)
+                        hidden_channels1=16,
+                        hidden_channels2=16)
