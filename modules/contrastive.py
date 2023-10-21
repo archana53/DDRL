@@ -50,17 +50,24 @@ print("Device:", device)
 print("Number of workers:", NUM_WORKERS)
 
 
-class ContrastiveLearning(nn.Module):
+class ContrastiveLearning(pl.LightningModule):
     
     def __init__(self, in_channels, out_channels, lr, temperature, weight_decay, max_epochs=500, hidden_channels1=256, hidden_channels2=128):
         super().__init__()
-        self.save_hyperparameters()
-        assert self.hparams.temperature > 0.0, 'The temperature must be a positive float!'
-        self.fc0 = nn.Linear(in_channels, hidden_channels1)
-        self.bn0 = nn.BatchNorm1d(hidden_channels1)
-        self.fc1 = nn.Linear(hidden_channels1, hidden_channels2)
-        self.bn1 = nn.BatchNorm1d(hidden_channels2)
-        self.fc = nn.Linear(hidden_channels2, out_channels)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.lr = lr
+        self.temperature = temperature
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
+        self.hidden_channels1 = hidden_channels1
+        self.hidden_channels2 = hidden_channels2
+        assert self.temperature > 0.0, 'The temperature must be a positive float!'
+        self.fc0 = nn.Linear(self.in_channels, self.hidden_channels1)
+        self.bn0 = nn.BatchNorm1d(self.hidden_channels1)
+        self.fc1 = nn.Linear(self.hidden_channels1, self.hidden_channels2)
+        self.bn1 = nn.BatchNorm1d(self.hidden_channels2)
+        self.fc = nn.Linear(self.hidden_channels2, self.out_channels)
 
     def forward(self, x):
         x = F.relu(self.bn0(self.fc0(x)))
@@ -70,11 +77,11 @@ class ContrastiveLearning(nn.Module):
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(),
-                                lr=self.hparams.lr,
-                                weight_decay=self.hparams.weight_decay)
+                                lr=self.lr,
+                                weight_decay=self.weight_decay)
         lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                            T_max=self.hparams.max_epochs,
-                                                            eta_min=self.hparams.lr/50)
+                                                            T_max=self.max_epochs,
+                                                            eta_min=self.lr/50)
         return [optimizer], [lr_scheduler]
 
     def info_nce_loss(self, batch, mode='train'):
@@ -91,7 +98,7 @@ class ContrastiveLearning(nn.Module):
         # Find positive example -> batch_size//2 away from the original example
         pos_mask = self_mask.roll(shifts=cos_sim.shape[0]//2, dims=0)
         # InfoNCE loss
-        cos_sim = cos_sim / self.hparams.temperature
+        cos_sim = cos_sim / self.temperature
         nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
         nll = nll.mean()
 
@@ -162,29 +169,34 @@ def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kw
 
     return model   
 
-unlabeled_data = STL10(root=DATASET_PATH, split='unlabeled', download=True,
+
+
+if __name__ == '__main__':
+    unlabeled_data = STL10(root=DATASET_PATH, split='unlabeled', download=True,
                        transform=ContrastiveTransformations(n_views=2))
-train_data_contrast = STL10(root=DATASET_PATH, split='train', download=True,
-                            transform=ContrastiveTransformations(n_views=2))
+    train_data_contrast = STL10(root=DATASET_PATH, split='train', download=True,
+                                transform=ContrastiveTransformations(n_views=2))
 
-pl.seed_everything(42)
-NUM_IMAGES = 6
-imgs = torch.stack([img for idx in range(NUM_IMAGES) for img in unlabeled_data[idx][0]], dim=0)
-img_grid = torchvision.utils.make_grid(imgs, nrow=6, normalize=True, pad_value=0.9)
-img_grid = img_grid.permute(1, 2, 0)
+    # pl.seed_everything(42)
+    # NUM_IMAGES = 6
+    # imgs = torch.stack([img for idx in range(NUM_IMAGES) for img in unlabeled_data[idx][0]], dim=0)
+    # img_grid = torchvision.utils.make_grid(imgs, nrow=6, normalize=True, pad_value=0.9)
+    # img_grid = img_grid.permute(1, 2, 0)
 
-plt.figure(figsize=(10,5))
-plt.title('Augmented image examples of the STL10 dataset')
-plt.imshow(img_grid)
-plt.axis('off')
-plt.show()
-plt.close()
-
-
-# simclr_model = train_cl(batch_size=256,
-#                             hidden_dim=128,
-#                             lr=5e-4,
-#                             temperature=0.07,
-#                             weight_decay=1e-4,
-#                             max_epochs=500)
-
+    # plt.figure(figsize=(10,5))
+    # plt.title('Augmented image examples of the STL10 dataset')
+    # plt.imshow(img_grid)
+    # plt.axis('off')
+    # plt.show()
+    # plt.close()
+    clr_model = train_cl(batch_size=256,
+                        unlabeled_data = unlabeled_data,
+                        train_data_contrast = train_data_contrast,
+                        in_channels=1024,
+                        out_channels = 128,
+                        lr=5e-4,
+                        temperature=0.07,
+                        weight_decay=1e-4,
+                        max_epochs=500,
+                        hidden_channels1=256,
+                        hidden_channels2=128)
