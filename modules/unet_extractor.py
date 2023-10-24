@@ -45,7 +45,7 @@ class ModelExtractor(nn.Module):
         if self.latent:
             noisy_pred = self.dim_reduce.decode(noisy_pred).sample
 
-        intermediate_features = [i[0] if len(i) > 1 else i for i in intermediate_features]
+        intermediate_features = [i[0] if type(i) is tuple else i for i in intermediate_features]
         for i in range(len(intermediate_features)):
             intermediate_features[i] = F.interpolate(intermediate_features[i], size=noisy_latents.shape[-2:], mode='bilinear')
 
