@@ -1,0 +1,11 @@
+albumentations==1.3.1
+-e git+https://github.com/archana53/diffusers.git@4d2c981d551566961bbc7254ae9556d76dd95764#egg=diffusers
+huggingface-hub==0.17.3
+numpy==1.24.1
+opencv-python-headless==4.8.1.78
+qudida==0.0.4
+tokenizers==0.14.1
+torch==2.0.1+cu118
+torchaudio==2.0.2+cu118
+torchvision==0.15.2+cu118
+transformers==4.34.0
