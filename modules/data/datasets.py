@@ -1,7 +1,9 @@
 import pathlib
 import json
 from typing import Tuple
+from enum import Enum
 
+import torch
 import albumentations as A
 import numpy as np
 from albumentations.pytorch import ToTensorV2
@@ -11,8 +13,8 @@ from torch.utils.data import Dataset
 
 class BaseTaskDataset(Dataset):
     """Base dataset class for downstream tasks. Child classes must implement __getitem__ and __len__.
-    Override augmentations in child classes if necessary.
-    Returns a dict with keys "image" and "label" for the image and label respectively.
+    Override augmentations in child classes.
+    Returns a dict with keys "image", "label", and "name" for the image, label and file name respectively.
     Args:
         root (pathlib.Path): Path to the root directory of the dataset.
         size (Tuple[int, int], optional): Size of the image as (height, width). Defaults to (256, 256).
@@ -31,24 +33,15 @@ class BaseTaskDataset(Dataset):
         self.root = root
         self.size = size
 
-        self.transforms = A.Compose(
-            [
-                # geometric
-                A.Flip(),
-                A.Rotate(limit=30),
-                A.RandomResizedCrop(*size),
-                # color
-                A.ColorJitter(),
-                A.GaussianBlur(),
-            ],
-            keypoint_params=A.KeypointParams(format="xy"),
-        )
+        self.transforms = None  # override in child classes
 
         self.to_tensor = A.Compose(
             [
+                A.Resize(*size),
                 A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                 ToTensorV2(transpose_mask=True),
-            ]
+            ],
+            is_check_shapes=False # CelebAHQMaskDataset has a different shape for image and mask
         )
 
     def __getitem__(self, idx):
@@ -60,7 +53,7 @@ class BaseTaskDataset(Dataset):
 
 class CelebAHQMaskDataset(BaseTaskDataset):
     """Dataset class for CelebA-HQ Mask dataset. Modified from https://github.com/zllrunning/face-parsing.PyTorch
-    Returns a dict with keys "image" and "label" for the image and segmentation map respectively.
+    Returns a dict with keys "image", "label", and "name" for the image, segmentation map, and file name respectively.
 
     Args:
         root (pathlib.Path): Path to the root directory of the dataset.
@@ -82,6 +75,20 @@ class CelebAHQMaskDataset(BaseTaskDataset):
             raise ValueError(
                 f"Number of images and labels do not match. Found {len(self.images)} images and {len(self.labels)} labels."
             )
+        
+        self.transforms = A.Compose(
+            [
+                # geometric
+                A.Flip(),
+                A.Rotate(limit=30),
+                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
+                A.RandomResizedCrop(*self.size),
+                # color
+                A.ColorJitter(),
+                A.GaussianBlur(),
+            ],
+            is_check_shapes=False  # CelebAHQMaskDataset has a different shape for image and mask
+        )
 
     def __getitem__(self, idx):
         image_path = self.images[idx]
@@ -95,10 +102,10 @@ class CelebAHQMaskDataset(BaseTaskDataset):
             image = transformed["image"]
             label = transformed["mask"]
 
-        transformed = self.to_tensor(image=np.array(image), mask=np.array(label))
+        transformed = self.to_tensor(image=image, mask=label)
         image = transformed["image"]
-        label = transformed["mask"].long()
-        return {"image": image, "label": label}
+        label = transformed["mask"].unsqueeze(0).long()
+        return {"image": image, "label": label, "name": image_path.name}
 
     def __len__(self):
         return len(self.images)
@@ -106,7 +113,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
 
 class DepthDataset(BaseTaskDataset):
     """Dataset class for single image facial depth estimation.
-    Returns a dict with keys "image" and "label" for the image and depth map respectively.
+    Returns a dict with keys "image", "label", and "name" for the image, depth map, and file name respectively.
     
     Args:
         root (pathlib.Path): Path to the root directory of the dataset.
@@ -116,8 +123,8 @@ class DepthDataset(BaseTaskDataset):
     def __init__(self, *args, **kwargs):
         super(DepthDataset, self).__init__(*args, **kwargs)
 
-        self.image_subfolder = "image"
-        self.depth_subfolder = "depth"
+        self.image_subfolder = "cropped_images"
+        self.depth_subfolder = "cropped_depths"
         self.images = sorted((self.root / self.image_subfolder).glob("*.jpg"))
         self.depths = sorted((self.root / self.depth_subfolder).glob("*.png"))
 
@@ -125,6 +132,18 @@ class DepthDataset(BaseTaskDataset):
             raise ValueError(
                 f"Number of images and depths do not match. Found {len(self.images)} images and {len(self.depths)} depths."
             )
+        
+        self.transforms = A.Compose(
+            [
+                # geometric
+                A.Flip(),
+                A.Rotate(limit=30),
+                A.RandomResizedCrop(*self.size),
+                # color
+                A.ColorJitter(),
+                A.GaussianBlur(),
+            ],
+        )
         
     def __getitem__(self, idx):
         image_path = self.images[idx]
@@ -140,9 +159,10 @@ class DepthDataset(BaseTaskDataset):
 
         transformed = self.to_tensor(image=np.array(image))
         image = transformed["image"]
-        depth = (depth / 127.5 - 1).unsqueeze(2)
-        depth = ToTensorV2()(image=np.array(depth))["image"]
-        return {"image": image, "label": depth}
+        depth = depth / 127.5 - 1
+        depth = np.expand_dims(depth, axis=0)
+        depth = torch.from_numpy(depth).float()
+        return {"image": image, "label": depth, "name": image_path.name}
     
     def __len__(self):
         return len(self.images)
@@ -165,6 +185,20 @@ class KeyPointDataset(BaseTaskDataset):
                 f"Number of images and keypoints do not match. Found {len(self.images)} images and {len(self.keypoints)} keypoints."
             )
         
+        self.transforms = A.Compose(
+            [
+                # geometric
+                A.Flip(),
+                A.Rotate(limit=30),
+                A.RandomResizedCrop(*self.size),
+                # color
+                A.ColorJitter(),
+                A.GaussianBlur(),
+            ],
+            keypoint_params=A.KeypointParams(format="xy")
+        )
+        
+        
     def __getitem__(self, idx):
         #TODO: test this
         image_path = self.images[idx]
@@ -186,3 +220,11 @@ class KeyPointDataset(BaseTaskDataset):
 
     def __len__(self):
         return len(self.images)
+
+
+class DatasetType(Enum):
+    """Enum for dataset types. Used to instantiate the correct dataset class.
+    """
+    CelebAHQMask = CelebAHQMaskDataset
+    Depth = DepthDataset
+    KeyPoint = KeyPointDataset
