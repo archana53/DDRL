@@ -9,12 +9,13 @@ from PIL import Image
 
 from diffusers import LDMPipeline
 
+
 class ModelExtractor(nn.Module):
     '''
     Module wrapper for extracting intermediate features from a model.
     '''
 
-    def __init__(self, pipe, model, scale_direction, scales, latent=True):
+    def __init__(self, pipe, model, scale_direction, scales, latent=True, upsample=True):
         '''
         Args:
             pipe (LDMPipeline): The pipeline used to generate the noise.\n
@@ -22,6 +23,7 @@ class ModelExtractor(nn.Module):
             scale_direction (list): The direction of the scales to extract features from.\n
             scales (list): The scales to extract features from.\n
             latent (bool): Whether or not the model takes in latents.
+            upsample (bool): Whether or not to upsample the output features.
         '''
         super().__init__()
         self.pipe = pipe
@@ -30,6 +32,7 @@ class ModelExtractor(nn.Module):
         self.scales = scales
         self.latent = latent
         self.dim_reduce = pipe.vqvae if latent else None
+        self.upsample = upsample
 
     def forward(self, x, t):
         '''
@@ -91,13 +94,15 @@ class ModelExtractor(nn.Module):
             # the block and as for the up_block we directly get the output so we do not need to check for tuple
             intermediate_features[name] = feat[0] if type(feat) is tuple else feat
             # Interpolate to the same size as the input
-            intermediate_features[name] = F.interpolate(intermediate_features[name], size=noisy_latents.shape[-2:], mode='bilinear')
+            if self.upsample:
+                intermediate_features[name] = F.interpolate(intermediate_features[name], size=noisy_latents.shape[-2:], mode='bilinear')
 
         # Return the predicted noise and the intermediate features
         # Intermediate features are returned as a dictionary with the
         # name of the layer as the key and the feature as the value
         return noisy_pred, intermediate_features
-    
+
+
 if __name__ == "__main__":
     
     # Load model
