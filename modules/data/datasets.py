@@ -27,7 +27,7 @@ class BaseTaskDataset(Dataset):
         *args,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
+        super(Dataset, self).__init__()
 
         if mode not in ("train", "val", "test"):
             raise ValueError(
@@ -130,6 +130,8 @@ class DepthDataset(BaseTaskDataset):
 
         self.image_subfolder = "cropped_images"
         self.depth_subfolder = "cropped_depths"
+        self.image_subfolder = "cropped_images"
+        self.depth_subfolder = "cropped_depths"
         self.images = sorted((self.root / self.image_subfolder).glob("*.jpg"))
         self.depths = sorted((self.root / self.depth_subfolder).glob("*.png"))
 
@@ -154,6 +156,7 @@ class DepthDataset(BaseTaskDataset):
 
         transformed = self.to_tensor(image=np.array(image))
         image = transformed["image"]
+        depth = np.expand_dims((depth / 127.5 - 1), 2)
         depth = np.expand_dims((depth / 127.5 - 1), 2)
         depth = ToTensorV2()(image=np.array(depth))["image"]
         return {"image": image, "label": depth}
