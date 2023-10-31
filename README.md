@@ -13,11 +13,11 @@ python modules/precompute_features.py --dataset CelebAHQMask --dataset_root /coc
 Sample loading code:
 ```python
 with h5py.File("h5_file_path", "r") as feature_store:
-    print("Available timesteps: ", feature_store.keys())
-    timestep_0 = feature_store["timestep_0"]
+    print("Available images: ", feature_store.keys())
+    image = feature_store["image_name"]
+    print("Available timesteps: ", image.keys())
+    timestep_0 = image["timestep_0"]
     print("Available features: ", timestep_0.keys())
     features = timestep_0["features"]
-    print("Images: ", features.keys())
-    feature = features["image_name"]
     print(feature.shape)
 ```
