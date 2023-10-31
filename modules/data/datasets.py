@@ -19,13 +19,15 @@ class BaseTaskDataset(Dataset):
         mode (str, optional): Mode of the dataset. Must be one of (train, val, test). Defaults to "train".
     """
 
+    def validate_root(self, root):
+        return not root.exists() or not root.is_dir()
     def __init__(self, root: pathlib.Path, size: Tuple[int, int] = (256, 256), mode: str = "train", *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         if mode not in ("train", "val", "test"):
             raise ValueError(f"mode must be one of (train, val, test). Given mode: {mode}")
-        if not root.exists() or not root.is_dir():
-            raise FileNotFoundError(f"Root directory {root} is not valid.")
+        if self.validate_root(root):
+            raise FileNotFoundError(f"Root {root} is not valid.")
 
         self.mode = mode
         self.root = root
@@ -152,37 +154,54 @@ class KeyPointDataset(BaseTaskDataset):
     """Dataset class for single image facial keypoint estimation.
     Returns a dict with keys "image" and "label" for the image and keypoint map respectively.
     """
+    def validate_root(self, root):
+        return not root.exists() or not root.is_file()
+    def get_file_info(self, ground_truth_file):
+        with open(ground_truth_file) as file:
+            ground_truths = [line.rstrip() for line in file]
+
+        image_paths = []
+        pts_paths = []
+        for ground_truth in ground_truths:
+            split_line = ground_truth.split(' ')
+            image_paths.append(split_line[0])
+            pts_paths.append(split_line[1])
+
+        return image_paths, pts_paths
+    def get_image_path(self, idx):
+        return self.file_info[idx][0]
+
+    def get_keypoints(self, pts_path):
+        with open(pts_path) as file:
+            lines = [line.rstrip() for line in file]
+
+        coords = []
+        for line in lines:
+            split_line = line.split(' ')
+            coords.append((float(split_line[1]), float(split_line[2])))
+
+        return coords
     def __init__(self, *args, **kwargs):
         super(KeyPointDataset, self).__init__(*args, **kwargs)
+        self.image_paths, self.pts_paths = self.get_file_info(self.root)
 
-        self.image_subfolder = "image"
-        self.keypoint_subfolder = "keypoint"
-        self.images = sorted((self.root / self.image_subfolder).glob("*.jpg"))
-        self.keypoints = sorted((self.root / self.keypoint_subfolder).glob("*.json"))
-
-        if len(self.images) != len(self.keypoints):
-            raise ValueError(
-                f"Number of images and keypoints do not match. Found {len(self.images)} images and {len(self.keypoints)} keypoints."
-            )
-        
     def __getitem__(self, idx):
         #TODO: test this
-        image_path = self.images[idx]
-        image = Image.open(image_path)
+        image_path = self.image_paths[idx]
+        keypoint_path = self.pts_paths[idx]
 
-        keypoint_path = self.keypoints[idx]
-        with open(keypoint_path) as json_file:
-            keypoint = json.load(json_file)
+        image = Image.open(image_path)
+        keypoints = self.get_keypoints(keypoint_path)
 
         if self.mode == "train":
-            transformed = self.transforms(image=np.array(image), keypoint=keypoint["keypoints"])
+            transformed = self.transforms(image=np.array(image), keypoints=keypoints)
             image = transformed["image"]
-            keypoint = transformed["keypoint"]
+            keypoint = transformed["keypoints"]
 
-        transformed = self.to_tensor(image=np.array(image), keypoint=keypoint)
+        transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
-        keypoint = transformed["keypoint"]
-        return {"image": image, "label": keypoint}
+        keypoints = transformed["keypoints"]
+        return {"image": image, "label": keypoints}
 
     def __len__(self):
-        return len(self.images)
+        return len(self.image_paths)
