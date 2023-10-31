@@ -45,15 +45,16 @@ class TestPrecomputeFeatures(unittest.TestCase):
             image_names = ["image1.jpg", "image2.jpg"]
             save_features(features, timestep, image_names, h5_file)
 
-            self.assertTrue("timestep_0" in h5_file)
-            self.assertTrue("feature_up" in h5_file["timestep_0"])
-            self.assertTrue("image1.jpg" in h5_file["timestep_0"]["feature_up"])
+            self.assertTrue("image1.jpg" in h5_file)
+            self.assertTrue("image2.jpg" in h5_file)
+            self.assertTrue("0" in h5_file["image1.jpg"])
+            self.assertTrue("up" in h5_file["image1.jpg"]["0"])
 
             self.assertTrue(
-                np.allclose(h5_file["timestep_0"]["feature_up"]["image1.jpg"], features["up"][0].cpu().numpy())
+                np.allclose(h5_file["image1.jpg"]["0"]["up"], features["up"][0].cpu().numpy())
             )
             self.assertTrue(
-                np.allclose(h5_file["timestep_0"]["feature_up"]["image2.jpg"], features["up"][1].cpu().numpy())
+                np.allclose(h5_file["image2.jpg"]["0"]["up"], features["up"][1].cpu().numpy())
             )
 
     def test_precompute_features(self):
@@ -69,21 +70,29 @@ class TestPrecomputeFeatures(unittest.TestCase):
                 image = batch["image"].cuda()
                 image_name = batch["name"]
                 for timestep in self.timesteps:
-                    _, features = self.extractor(image, timestep)
-                    save_features(features, timestep, image_name, h5_file)
+                    _ = self.extractor(image, timestep)
+                    save_features(self.extractor.intermediate_features, timestep, image_name, h5_file)
 
                 if i == num_iter - 1:  # break after `num_iter` batches
                     break
 
         with h5py.File(self.output_file, "r") as h5_file:
-            self.assertTrue("timestep_0" in h5_file)
-            self.assertTrue("timestep_200" in h5_file)
-            self.assertTrue("timestep_800" in h5_file)
-            feature_name = list(features.keys())[0]
-            self.assertTrue(all(f"feature_{x}" in h5_file["timestep_0"] for x in features.keys()))
-            self.assertTrue(all(x in h5_file["timestep_0"][f"feature_{feature_name}"] for x in image_name))
-            self.assertEqual(len(h5_file), len(self.timesteps))
-            self.assertEqual(len(h5_file["timestep_0"][f"feature_{feature_name}"]), num_iter * self.batch_size)
+            features = self.extractor.intermediate_features
+
+            # image name
+            self.assertTrue(image_name[0] in h5_file)
+
+            # timestep
+            self.assertTrue("0" in h5_file[image_name[0]])
+            self.assertTrue("200" in h5_file[image_name[0]])
+            self.assertTrue("800" in h5_file[image_name[0]])
+
+            # feature name
+            self.assertTrue(all(x in h5_file[image_name[0]]["0"] for x in features.keys()))
+
+            # dataset lengths
+            self.assertEqual(len(h5_file), num_iter * self.batch_size)
+            self.assertEqual(len(h5_file[image_name[0]]), len(self.timesteps))
 
 
 if __name__ == "__main__":

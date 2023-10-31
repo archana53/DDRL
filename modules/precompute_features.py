@@ -15,7 +15,11 @@ from unet_extractor import ModelExtractor
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
-        "--dataset", type=str, required=True, choices=["CelebAHQMask", "Depth", "KeyPoint"], help="Dataset to use"
+        "--dataset",
+        type=str,
+        required=True,
+        choices=["CelebAHQMask", "Depth", "KeyPoint"],
+        help="Dataset to use",
     )
     parser.add_argument("--dataset_root", type=str, required=True, help="Root path of the dataset")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for feature extraction")
@@ -30,13 +34,56 @@ def parse_args():
         help="UNet block directions to extract features from",
     )
     parser.add_argument(
-        "--scales", type=int, nargs="+", default=[0, 1, 2, 3], help="UNet block indices to extract features from"
+        "--scales",
+        type=int,
+        nargs="+",
+        default=[0, 1, 2, 3],
+        help="UNet block indices to extract features from",
     )
-    parser.add_argument("--timestep_freq", type=int, default=100, help="Frequency of timesteps to save features at")
-    parser.add_argument("--no_latent", dest="latent", action="store_false", help="Do not use LDM architecture")
-    parser.add_argument("--output_dir", type=str, required=True, help="Directory path to store the features")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output feature store")
+    parser.add_argument(
+        "--timestep_range",
+        type=int,
+        nargs="+",
+        default=[0, 1000, 100],
+        help="Start, stop and step of timesteps",
+    )
+    parser.add_argument(
+        "--no_latent",
+        dest="latent",
+        action="store_false",
+        help="Do not use LDM architecture",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Directory path to store the features",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing output feature store",
+    )
     return parser.parse_args()
+
+
+def _already_exists(feature_names, timestep, image_name, h5_file):
+    """Checks if features already exist in h5 file.
+    :param feature_names: list of feature names
+    :param timestep: timestep of features
+    :param image_name: name of image
+    :param h5_file: h5 file to check
+    :return: True if features already exist, False otherwise
+    """
+    for i in range(len(image_name)):
+        for feature_name in feature_names:
+            if f"{image_name[i]}/{timestep}/{feature_name}" not in h5_file:
+                # delete all features of image if one feature is missing
+                # to avoid h5 overwriting error
+                if image_name[i] in h5_file:
+                    del h5_file[image_name[i]]
+                return False
+    return True
 
 
 def save_features(features, timestep, image_names, h5_file):
@@ -50,7 +97,7 @@ def save_features(features, timestep, image_names, h5_file):
     for feature_name, feature in features.items():
         for i, f in enumerate(feature):
             f = f.detach().cpu().numpy()
-            h5_file.create_dataset(f"timestep_{timestep}/feature_{feature_name}/{image_names[i]}", data=f)
+            h5_file.create_dataset(f"{image_names[i]}/{timestep}/{feature_name}", data=f)
 
 
 if __name__ == "__main__":
@@ -59,32 +106,45 @@ if __name__ == "__main__":
     pipe = LDMPipeline.from_pretrained("CompVis/ldm-celebahq-256")
     unet = pipe.unet
 
+    # set up dataloaders
     dataset_cls = DatasetType[args.dataset].value
-    dataset = dataset_cls(root=Path(args.dataset_root), mode="test", size=(args.resolution, args.resolution))
+    dataset = dataset_cls(
+        root=Path(args.dataset_root),
+        mode="test",
+        size=(args.resolution, args.resolution),
+    )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     extractor = ModelExtractor(pipe, unet, args.scale_directions, args.scales, args.latent, upsample=False).cuda()
-    timesteps = torch.arange(0, 1000, args.timestep_freq).cuda()  # save features every `timestep` timesteps
+    timesteps = torch.arange(*args.timestep_range).cuda()  # save features every `timestep` timesteps
 
     # set up output directory
     output_dir = args.output_dir
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    output_file = os.path.join(output_dir, f"{args.dataset.lower()}_features.h5")
+    timesteps_suffix = '_'.join([str(x) for x in args.timestep_range])
+    output_file = os.path.join(output_dir, f"{args.dataset.lower()}_timesteps_{timesteps_suffix}_features.h5")
 
     # check if output file exists
-    if os.path.exists(output_file):
-        if args.overwrite:
-            os.remove(output_file)
-        else:
-            raise FileExistsError(f"File {output_file} already exists. Use --overwrite to overwrite it.")
+    if os.path.exists(output_file) and args.overwrite:
+        os.remove(output_file)
+        
+    # run model on dummy input to get feature names
+    dummy_input = torch.randn(1, 3, args.resolution, args.resolution).cuda()
+    _ = extractor(dummy_input, timesteps[0])
+    feature_names = list(extractor.intermediate_features.keys())
 
-    # add save_features callback to model
-    with File(output_file, "w") as h5_file:
+    with File(output_file, "a") as h5_file:
         # run model on dataset
         for i, batch in enumerate(tqdm(dataloader)):
             image = batch["image"].cuda()
             image_name = batch["name"]
             for timestep in timesteps:
-                _, features = extractor(image, timestep)
-                save_features(features, timestep, image_name, h5_file)
+
+                # skip if features already exist
+                if _already_exists(feature_names, timestep, image_name, h5_file):
+                    continue
+
+                with torch.inference_mode():
+                    _ = extractor(image, timestep)
+                save_features(extractor.intermediate_features, timestep, image_name, h5_file)

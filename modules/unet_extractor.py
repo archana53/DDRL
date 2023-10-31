@@ -33,6 +33,34 @@ class ModelExtractor(nn.Module):
         self.latent = latent
         self.dim_reduce = pipe.vqvae if latent else None
         self.upsample = upsample
+        self.intermediate_features = {}
+
+        # Register hooks
+        self.__register_hooks()
+
+    def __register_hooks(self):
+        # Register hook to extract intermediate features
+        def hook_fn(module, input, output, scale=0, direction="mid"):
+            # Dictionary to store intermediate features
+            # the scale is scaling in the UNet and depends on sampling of the input
+            # direction is either "up", "down", or "mid"
+            feature_name = module._get_name() + "_" + str(direction) + "{" + str(scale) + "}"
+            self.intermediate_features[feature_name] = output
+
+        # Register hooks
+        for direction in self.scale_direction:
+            # Register hook for mid_block if direction is not up or down
+            if direction not in ["up", "down"]:
+                # Register hook for mid_block
+                self.model.mid_block.register_forward_hook(hook_fn)
+            else:
+                # Register hook for up_blocks or down_blocks
+                for f in self.scales:
+                    if direction == "up":
+                        self.model.up_blocks[f].register_forward_hook(partial(hook_fn, scale=f, direction=direction))
+                    else:
+                        self.model.down_blocks[f].register_forward_hook(partial(hook_fn, scale=f, direction=direction))
+
 
     def forward(self, x, t):
         '''
@@ -49,28 +77,7 @@ class ModelExtractor(nn.Module):
             intermediate_features (dict): The intermediate features extracted from the model.\n
             intermediate_features[name] (torch.Tensor) [batch_size, channels, height, width] : The intermediate feature with the name `name`.
         '''
-
-        # Register hook to extract intermediate features
-        def hook_fn(module, input, output, scale=0, direction="mid"):
-            # Dictionary to store intermediate features
-            # the scale is scaling in the UNet and depends on sampling of the input
-            # direction is either "up", "down", or "mid"
-            intermediate_features[module._get_name() + "_" + str(direction) + "{" + str(scale) + "}"] = output
-        intermediate_features = {}
-
-        # Register hooks
-        for direction in self.scale_direction:
-            # Register hook for mid_block if direction is not up or down
-            if direction not in ["up", "down"]:
-                # Register hook for mid_block
-                self.model.mid_block.register_forward_hook(hook_fn)
-            else:
-                # Register hook for up_blocks or down_blocks
-                for f in self.scales:
-                    if direction == "up":
-                        self.model.up_blocks[f].register_forward_hook(partial(hook_fn, scale=f, direction=direction))
-                    else:
-                        self.model.down_blocks[f].register_forward_hook(partial(hook_fn, scale=f, direction=direction))
+        self.intermediate_features = {}
 
         # Convert to latent representation if a latent model
         if self.latent:
@@ -88,19 +95,19 @@ class ModelExtractor(nn.Module):
             noisy_pred = self.dim_reduce.decode(noisy_pred).sample
 
         # Interpolate intermediate features to the same size as the input
-        for name, feat in intermediate_features.items():
+        for name, feat in self.intermediate_features.items():
             # If the feature is from an DownBlock then huggingsface returns a tuple of output and hidden state
             # which is most likely used for the skip connection and thereby we have to only take teh output of
             # the block and as for the up_block we directly get the output so we do not need to check for tuple
-            intermediate_features[name] = feat[0] if type(feat) is tuple else feat
+            self.intermediate_features[name] = feat[0] if type(feat) is tuple else feat
             # Interpolate to the same size as the input
             if self.upsample:
-                intermediate_features[name] = F.interpolate(intermediate_features[name], size=noisy_latents.shape[-2:], mode='bilinear')
+                self.intermediate_features[name] = F.interpolate(self.intermediate_features[name], size=noisy_latents.shape[-2:], mode='bilinear')
 
         # Return the predicted noise and the intermediate features
         # Intermediate features are returned as a dictionary with the
         # name of the layer as the key and the feature as the value
-        return noisy_pred, intermediate_features
+        return noisy_pred
 
 
 if __name__ == "__main__":
