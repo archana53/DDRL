@@ -100,7 +100,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    device = "cuda" if torch.cuda else "cpu"
+    device = "cpu"  # TODO CHANGE BACK TO DEVICE
     # Get the backbone model and setup
     if args.conditional:
         raise ValueError("Conditional Diffusion Models not supported yet")
