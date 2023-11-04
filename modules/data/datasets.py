@@ -102,7 +102,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
             image = transformed["image"]
             label = transformed["mask"]
 
-        transformed = self.to_tensor(image=image, mask=label)
+        transformed = self.to_tensor(image=np.array(image), mask=np.array(label))
         image = transformed["image"]
         label = transformed["mask"].unsqueeze(0).long()
         return {"image": image, "label": label, "name": image_path.name}
@@ -159,9 +159,9 @@ class DepthDataset(BaseTaskDataset):
 
         transformed = self.to_tensor(image=np.array(image))
         image = transformed["image"]
-        depth = depth / 127.5 - 1
+        depth = np.array(depth) / 127.5 - 1
         depth = np.expand_dims(depth, axis=0)
-        depth = torch.from_numpy(depth).float()
+        depth = torch.from_numpy(depth).to(torch.float32)
         return {"image": image, "label": depth, "name": image_path.name}
     
     def __len__(self):

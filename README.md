@@ -21,3 +21,16 @@ with h5py.File("h5_file_path", "r") as feature_store:
     features = timestep_0["features"]
     print(feature.shape)
 ```
+
+Loading using the `FeatureLoader` class:
+```python
+from modules.feature_loader import FeatureLoader
+
+try:
+    feature_loader = FeatureLoader("h5_file_path", scales, scale_directions, timestep, resolution)
+except KeyError as e:  # features unavailable
+    print(e)
+
+# Get features for a single image
+features = feature_loader(image_name)
+```
