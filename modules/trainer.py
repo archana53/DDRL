@@ -18,6 +18,7 @@ class PLModelTrainer(pl.LightningModule):
     def forward(self, x, t=None):
         if t == None:
             t = self.time_step
+        t = t.to(x.device)
         _, features = self.backbone.get_features(
             x, t
         )  # _ , features = self.backbone(x)

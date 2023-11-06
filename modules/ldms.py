@@ -145,53 +145,6 @@ class UnconditionalDiffusionModel(nn.Module):
         # Predicts the noise given an input latent and the time step.
         return self.unet
 
-    def set_feature_scales_and_direction(self, scales, scale_direction):
-        if scales == "all":
-            self.scales = [0, 1, 2]
-        self.scale_direction = (
-            [scale_direction] if scale_direction in ["up", "down"] else ["up", "down"]
-        )
-        self.num_feature_channels = len(self.scales) * len(self.scale_direction)
-
-    def get_features(self, x, t):
-        def hook_fn(module, input, output):
-            intermediate_features.append(output)
-
-        intermediate_features = []
-        for direction in self.scale_direction:
-            if direction not in ["up", "down"]:
-                self.unet.mid_block.register_forward_hook(hook_fn)
-            else:
-                for f in self.scales:
-                    if direction == "up":
-                        self.unet.up_blocks[f].register_forward_hook(hook_fn)
-                    else:
-                        self.unet.down_blocks[f].register_forward_hook(hook_fn)
-
-        if self.latent:  # Convert to latent space
-            if len(x.shape) == 3:
-                x = x[None, :, :, :]
-
-            x = self.vqvae.encode(x).latents
-
-        noisy_latents, noise_added = self.get_noisy_samples(x, t)
-        noisy_pred = self.unet(noisy_latents, t).sample
-
-        if self.latent:
-            noisy_pred = self.vqvae.decode(noisy_pred).sample
-
-        intermediate_features = [
-            i[0] if type(i) is tuple else i for i in intermediate_features
-        ]
-        for i in range(len(intermediate_features)):
-            intermediate_features[i] = F.interpolate(
-                intermediate_features[i], size=noisy_latents.shape[-2:], mode="bilinear"
-            )
-
-        final_intermediate_features = torch.cat(intermediate_features, dim=1)
-        intermediate_features = []
-        return noisy_pred, final_intermediate_features
-
     def get_vqvae(self):
         # Used to compress the input images into a latent space
         return self.vqvae

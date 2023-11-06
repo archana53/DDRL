@@ -117,13 +117,11 @@ if __name__ == "__main__":
         root=Path(args.root_path),
         mode="train",
         size=(args.img_res, args.img_res),
-        batch_size=args.batch_size,
     )
     task_val_dataloader = task_config["dataloader"](
         root=Path(args.root_path),
         mode="val",
         size=(args.img_res, args.img_res),
-        batch_size=args.batch_size,
     )
     if task_config["head"] == PixelwiseMLPHead:
         in_features = model.feature_size[1]
