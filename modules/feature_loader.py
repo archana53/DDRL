@@ -63,7 +63,7 @@ class FeatureLoader:
 
     def _get_available_feature_names(self):
         """Returns a list of available feature names."""
-        with h5py.File(self.h5_file, "r") as f:
+        with h5py.File(self.h5_file, "r", swmr=True) as f:
             images = list(f.keys())
             timesteps = list(f[images[0]].keys())
             features = list(f[images[0]][timesteps[0]].keys())
@@ -90,7 +90,7 @@ class FeatureLoader:
         Returns:
             Dict[str, np.array]: A dictionary containing the features.
         """
-        with h5py.File(self.h5_file, "r") as f:
+        with h5py.File(self.h5_file, "r", swmr=True) as f:
             features = {}
             for feature_name in f[image_name][str(self.timestep)]:
                 dest_feature_name = feature_name.split("_")[1]
