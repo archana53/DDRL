@@ -10,17 +10,11 @@ import torch.nn.functional as F
 class ConvHead(nn.Module):
     """Convolutional head for downstream tasks"""
 
-    def __init__(
-        self, in_channels, hidden_channels, out_channels, kernel_size=3, padding=1
-    ):
+    def __init__(self, in_channels, hidden_channels, out_channels, kernel_size=3, padding=1):
         super().__init__()
-        self.conv0 = nn.Conv2d(
-            in_channels, hidden_channels, kernel_size, padding=padding
-        )
+        self.conv0 = nn.Conv2d(in_channels, hidden_channels, kernel_size, padding=padding)
         self.bn0 = nn.BatchNorm2d(hidden_channels)
-        self.conv = nn.Conv2d(
-            hidden_channels, out_channels, kernel_size, padding=padding
-        )
+        self.conv = nn.Conv2d(hidden_channels, out_channels, kernel_size, padding=padding)
 
     def forward(self, x):
         x = F.relu(self.bn0(self.conv0(x)))
@@ -28,36 +22,10 @@ class ConvHead(nn.Module):
         return x
 
 
-class PixelwiseMLPHead(torch.nn.Module):
-    def __init__(
-        self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
-    ):
-        super(PixelwiseMLPHead, self).__init__()
-        self.fc1 = nn.Linear(in_channels, hidden_channels1)
-        self.bn0 = nn.BatchNorm1d(hidden_channels1)
-        self.fc2 = nn.Linear(hidden_channels1, hidden_channels2)
-        self.bn1 = nn.BatchNorm1d(hidden_channels2)
-        self.fc3 = nn.Linear(hidden_channels2, out_channels)
-
-    def forward(self, x):
-        batch_size, num_channels, height, width = x.size()
-        x = x.view(batch_size * height * width, num_channels)
-        x = F.relu(self.fc1(x))
-        x = self.bn0(x)
-        x = F.relu(self.fc2(x))
-        x = self.bn1(x)
-        x = self.fc3(x)
-        x = x.view(batch_size, height, width, -1)
-        x = x.permute(0, 3, 1, 2)
-        return x
-
-
 class MLPHead(nn.Module):
     """MLP head for downstream tasks"""
 
-    def __init__(
-        self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
-    ):
+    def __init__(self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128):
         super().__init__()
         self.fc0 = nn.Linear(in_channels, hidden_channels1)
         self.bn0 = nn.BatchNorm1d(hidden_channels1)
@@ -87,10 +55,7 @@ class MLPEnsembleHead(nn.Module):
         super().__init__()
         self.n_models = n_models
         self.ensemble = nn.ModuleList(
-            [
-                MLPHead(in_channels, out_channels, hidden_channels1, hidden_channels2)
-                for _ in range(n_models)
-            ]
+            [MLPHead(in_channels, out_channels, hidden_channels1, hidden_channels2) for _ in range(n_models)]
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -123,13 +88,9 @@ class KeyPointHead(nn.Module):
         super().__init__()
         self.pool = nn.AdaptiveMaxPool2d(pool_to)
         mlp_in_channels = (
-            pool_to[0] * pool_to[1] * in_channels
-            if isinstance(pool_to, tuple)
-            else pool_to * pool_to * in_channels
+            pool_to[0] * pool_to[1] * in_channels if isinstance(pool_to, tuple) else pool_to * pool_to * in_channels
         )
-        self.mlp = MLPHead(
-            mlp_in_channels, out_channels, hidden_channels1, hidden_channels2
-        )
+        self.mlp = MLPHead(mlp_in_channels, out_channels, hidden_channels1, hidden_channels2)
 
     def forward(self, x):
         x = self.pool(x)

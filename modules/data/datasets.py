@@ -21,20 +21,11 @@ class BaseTaskDataset(Dataset):
         mode (str, optional): Mode of the dataset. Must be one of (train, val, test). Defaults to "train".
     """
 
-    def __init__(
-        self,
-        root: pathlib.Path,
-        size: Tuple[int, int] = (256, 256),
-        mode: str = "train",
-        *args,
-        **kwargs,
-    ):
+    def __init__(self, root: pathlib.Path, size: Tuple[int, int] = (256, 256), mode: str = "train", *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         if mode not in ("train", "val", "test"):
-            raise ValueError(
-                f"mode must be one of (train, val, test). Given mode: {mode}"
-            )
+            raise ValueError(f"mode must be one of (train, val, test). Given mode: {mode}")
         if not root.exists() or not root.is_dir():
             raise FileNotFoundError(f"Root directory {root} is not valid.")
 
@@ -50,7 +41,7 @@ class BaseTaskDataset(Dataset):
                 A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                 ToTensorV2(transpose_mask=True),
             ],
-            is_check_shapes=False,  # CelebAHQMaskDataset has a different shape for image and mask
+            is_check_shapes=False # CelebAHQMaskDataset has a different shape for image and mask
         )
 
     def __getitem__(self, idx):
@@ -84,21 +75,19 @@ class CelebAHQMaskDataset(BaseTaskDataset):
             raise ValueError(
                 f"Number of images and labels do not match. Found {len(self.images)} images and {len(self.labels)} labels."
             )
-
+        
         self.transforms = A.Compose(
             [
                 # geometric
                 A.Flip(),
                 A.Rotate(limit=30),
-                A.Resize(
-                    512, 512
-                ),  # resize both image and mask to 512x512 before cropping
+                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
                 A.RandomResizedCrop(*self.size),
                 # color
                 A.ColorJitter(),
                 A.GaussianBlur(),
             ],
-            is_check_shapes=False,  # CelebAHQMaskDataset has a different shape for image and mask
+            is_check_shapes=False  # CelebAHQMaskDataset has a different shape for image and mask
         )
 
     def __getitem__(self, idx):
@@ -106,9 +95,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
         image = Image.open(image_path)
 
         label_path = self.labels[idx]
-        label = Image.open(
-            image_path.parent.parent / self.label_subfolder / label_path
-        ).convert("P")
+        label = Image.open(image_path.parent.parent / self.label_subfolder / label_path).convert("P")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(label))
@@ -127,15 +114,14 @@ class CelebAHQMaskDataset(BaseTaskDataset):
 class DepthDataset(BaseTaskDataset):
     """Dataset class for single image facial depth estimation.
     Returns a dict with keys "image", "label", and "name" for the image, depth map, and file name respectively.
-
+    
     Args:
         root (pathlib.Path): Path to the root directory of the dataset.
         size (Tuple[int, int], optional): Size of the image. Defaults to (256, 256).
         mode (str, optional): Mode of the dataset. Must be one of (train, val, test). Defaults to "train".
     """
-
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(DepthDataset, self).__init__(*args, **kwargs)
 
         self.image_subfolder = "cropped_images"
         self.depth_subfolder = "cropped_depths"
@@ -146,7 +132,7 @@ class DepthDataset(BaseTaskDataset):
             raise ValueError(
                 f"Number of images and depths do not match. Found {len(self.images)} images and {len(self.depths)} depths."
             )
-
+        
         self.transforms = A.Compose(
             [
                 # geometric
@@ -158,15 +144,13 @@ class DepthDataset(BaseTaskDataset):
                 A.GaussianBlur(),
             ],
         )
-
+        
     def __getitem__(self, idx):
         image_path = self.images[idx]
         image = Image.open(image_path)
 
         depth_path = self.depths[idx]
-        depth = Image.open(
-            image_path.parent.parent / self.depth_subfolder / depth_path
-        ).convert("L")
+        depth = Image.open(image_path.parent.parent / self.depth_subfolder / depth_path).convert("L")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(depth))
@@ -179,16 +163,15 @@ class DepthDataset(BaseTaskDataset):
         depth = np.expand_dims(depth, axis=0)
         depth = torch.from_numpy(depth).float()
         return {"image": image, "label": depth, "name": image_path.name}
-
+    
     def __len__(self):
         return len(self.images)
-
+    
 
 class KeyPointDataset(BaseTaskDataset):
     """Dataset class for single image facial keypoint estimation.
     Returns a dict with keys "image" and "label" for the image and keypoint map respectively.
     """
-
     def __init__(self, *args, **kwargs):
         super(KeyPointDataset, self).__init__(*args, **kwargs)
 
@@ -201,7 +184,7 @@ class KeyPointDataset(BaseTaskDataset):
             raise ValueError(
                 f"Number of images and keypoints do not match. Found {len(self.images)} images and {len(self.keypoints)} keypoints."
             )
-
+        
         self.transforms = A.Compose(
             [
                 # geometric
@@ -212,11 +195,12 @@ class KeyPointDataset(BaseTaskDataset):
                 A.ColorJitter(),
                 A.GaussianBlur(),
             ],
-            keypoint_params=A.KeypointParams(format="xy"),
+            keypoint_params=A.KeypointParams(format="xy")
         )
-
+        
+        
     def __getitem__(self, idx):
-        # TODO: test this
+        #TODO: test this
         image_path = self.images[idx]
         image = Image.open(image_path)
 
@@ -225,9 +209,7 @@ class KeyPointDataset(BaseTaskDataset):
             keypoint = json.load(json_file)
 
         if self.mode == "train":
-            transformed = self.transforms(
-                image=np.array(image), keypoint=keypoint["keypoints"]
-            )
+            transformed = self.transforms(image=np.array(image), keypoint=keypoint["keypoints"])
             image = transformed["image"]
             keypoint = transformed["keypoint"]
 
@@ -241,8 +223,8 @@ class KeyPointDataset(BaseTaskDataset):
 
 
 class DatasetType(Enum):
-    """Enum for dataset types. Used to instantiate the correct dataset class."""
-
+    """Enum for dataset types. Used to instantiate the correct dataset class.
+    """
     CelebAHQMask = CelebAHQMaskDataset
     Depth = DepthDataset
     KeyPoint = KeyPointDataset
