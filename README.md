@@ -51,7 +51,7 @@ Each GTB/GTL file has the format -
 ```
 
 #### processed
-The processed folder has the following file format corresponding to the images - 
+The processed folder has the following file format corresponding to the images -
 ```
 └── annotations
     ├── 0

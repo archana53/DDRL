@@ -11,6 +11,23 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 class AFLWFace():
+    #todo: Face_box presents a concern about the data. Focus on this if things go wrong
+    # when there is time
+    """A class to hold information about the faces in AFLW.
+       Index: index in the order of loading the images
+       Image_Path: path to the image for dataloader
+       Face_Box: Bounding box around the face. Previous users of AFLW used
+                 two kinds of boxes - one that AFLW provided and one calculated from
+                 keypoints. I believe they went through the data and found the bounding boxes
+                 lacking so they algorithmically created their own. We may need to experiment with
+                 both kinds of data. The main use of this seems to be for filtering for images that are
+                 front facing. My main concern is that for the GTL case where box is derived from points,
+                 by following the logic, wouldn't it always be front-facing?
+       Masks: Unsure of the significance as of now. Initial thought was that these are the keypoints that are
+              hidden and estimated, but the logic in check_front would be moot then.
+       Landmarks: The final set of keypoints
+    """
+    NUMBER_OF_KEYPOINTS = 19
     def __init__(self, index, name, mask, landmark, box):
         self.image_path = name
         self.face_id = index
@@ -19,6 +36,9 @@ class AFLWFace():
         landmark = landmark.copy()
         self.landmarks = np.concatenate((landmark, mask), axis=1)
 
+    """Based upon whether to use the ALFW bounding box or the algorithmically created one from landmarks,
+    returns bounding box and face size
+    """
     def get_face_size(self, use_box):
         box = []
         if use_box == 'GTL':
@@ -33,6 +53,8 @@ class AFLWFace():
         box_str = '{:.2f} {:.2f} {:.2f} {:.2f}'.format(box[0], box[1], box[2], box[3])
         return box_str, face_size
 
+    """If all the landmarks are within the bounding box, face is facing front
+    """
     def check_front(self):
         oks = 0
         box = self.face_box
@@ -42,7 +64,7 @@ class AFLWFace():
                 if x > self.face_box[0] and x < self.face_box[2]:
                     if y > self.face_box[1] and y < self.face_box[3]:
                         oks = oks + 1
-        return oks == 19
+        return oks == self.NUMBER_OF_KEYPOINTS
 
     def __repr__(self):
         return ('{name}(path={image_path}, face-id={face_id})'.format(name=self.__class__.__name__, **self.__dict__))
@@ -57,32 +79,32 @@ def save_to_list_file(root_dir, allfaces, lst_file, image_style_dir,
             save_faces.append(face)
     print('Prepare to save {} face images into {}'.format(len(save_faces), lst_file))
 
-    lst_file = open(lst_file, 'w')
-    all_face_sizes = []
-    index = 0
-    for face in save_faces:
-        image_path = face.image_path
-        sub_dir, base_name = image_path.split('/')
-        annot_dir = osp.join(root_dir, annotation_dir, sub_dir)
-        annot_path = osp.join(root_dir, annot_dir, base_name.split('.')[0] + '-{}.pts'.format(face.face_id))
-        if not osp.isdir(annot_dir): os.makedirs(annot_dir)
-        image_path = osp.join(root_dir, image_style_dir, image_path)
-        assert osp.isfile(image_path), 'The image [{}/{}] {} does not exist'.format(index, len(save_faces), image_path)
+    with open(lst_file, 'w') as lst_file:
+        all_face_sizes = []
+        index = 0
+        for face in save_faces:
+            image_path = face.image_path
+            sub_dir, base_name = image_path.split('/')
+            annot_dir = root_dir / annotation_dir / sub_dir
+            pts_file_name = base_name.split('.')[0] + '-{}.pts'.format(face.face_id)
+            annot_path = root_dir / annot_dir / pts_file_name
+            annot_dir.mkdir(exist_ok=True, parents=True)
+            image_path = root_dir / image_style_dir / image_path
+            assert image_path.is_file(), 'The image [{}/{}] {} does not exist'.format(index, len(save_faces), image_path)
 
-        if not osp.isfile(annot_path):
-            pts_str = PTSconvert2str(face.landmarks.T)
-            pts_file = open(annot_path, 'w')
-            pts_file.write('{}'.format(pts_str))
-            pts_file.close()
-        else:
-            pts_str = None
+            # pts_file corresponds to the <keypoint_annotation_path> used by the dataloader
+            if not annot_path.is_file():
+                pts_str = PTSconvert2str(face.landmarks.T)
+                with open(annot_path, 'w') as pts_file:
+                    pts_file.write('{}'.format(pts_str))
+            else:
+                pts_str = None
 
-        box_str, face_size = face.get_face_size(use_box)
+            box_str, face_size = face.get_face_size(use_box)
 
-        lst_file.write('{} {} {} {}\n'.format(image_path, annot_path, box_str, face_size))
-        all_face_sizes.append(face_size)
-        index = index + 1
-    lst_file.close()
+            lst_file.write('{} {} {} {}\n'.format(image_path, annot_path, box_str, face_size))
+            all_face_sizes.append(face_size)
+            index = index + 1
 
     all_faces = np.array(all_face_sizes)
     print('all faces : mean={}, std={}'.format(all_faces.mean(), all_faces.std()))
@@ -108,17 +130,17 @@ if __name__ == "__main__":
 
     root_dir = Path(args.root_dir)
 
-    SAVE_DIR = osp.join(root_dir, 'AFLW_lists')
-    if not osp.isdir(SAVE_DIR): os.makedirs(SAVE_DIR)
+    SAVE_DIR = root_dir / 'AFLW_lists'
+    SAVE_DIR.mkdir(exist_ok=True)
     image_dir = 'images'
     annot_dir = osp.join('processed', 'annotations')
     print('AFLW image dir : {}'.format(image_dir))
     print('AFLW annotation dir : {}'.format(annot_dir))
 
 
-    mat_path = osp.join(root_dir, 'AFLWinfo_release.mat')
+    mat_path = root_dir / 'AFLWinfo_release.mat'
     aflwinfo = dict()
-    mat = loadmat(mat_path)
+    mat = loadmat(str(mat_path))
     total_image = 24386
 
     aflwinfo['name-list'] = []
