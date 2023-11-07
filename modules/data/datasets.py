@@ -52,6 +52,7 @@ class BaseTaskDataset(Dataset):
                 ToTensorV2(transpose_mask=True),
             ],
             is_check_shapes=False,  # CelebAHQMaskDataset has a different shape for image and mask
+            keypoint_params=A.KeypointParams(format="xy")
         )
 
     def __getitem__(self, idx):
@@ -243,9 +244,9 @@ class KeyPointDataset(BaseTaskDataset):
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), keypoints=keypoints)
             image = transformed["image"]
-            keypoint = transformed["keypoints"]
+            keypoints = transformed["keypoints"]
 
-        transformed = self.transforms(image=np.array(image), keypoints=keypoints)
+        transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
         keypoints = transformed["keypoints"]
         return {"image": image, "label": keypoints}
