@@ -7,6 +7,7 @@ import numpy as np
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
+from enum import Enum
 
 
 class BaseTaskDataset(Dataset):
@@ -35,10 +36,8 @@ class BaseTaskDataset(Dataset):
             raise ValueError(
                 f"mode must be one of (train, val, test). Given mode: {mode}"
             )
-        if not root.exists() or not root.is_dir():
-            raise FileNotFoundError(f"Root directory {root} is not valid.")
         if self.validate_root(root):
-            raise FileNotFoundError(f"Root {root} is not valid.")
+            raise FileNotFoundError(f"Root directory {root} is not valid.")
 
         self.mode = mode
         self.root = root
@@ -246,7 +245,7 @@ class KeyPointDataset(BaseTaskDataset):
             image = transformed["image"]
             keypoint = transformed["keypoints"]
 
-        transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
+        transformed = self.transforms(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
         keypoints = transformed["keypoints"]
         return {"image": image, "label": keypoints}
