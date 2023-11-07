@@ -48,7 +48,13 @@ class FeatureLoader:
         """Checks if all required features are available in the h5 file."""
         available_timesteps, available_feature_names = self._get_available_feature_names()
         if self.timestep not in available_timesteps or not self.feature_names.issubset(available_feature_names):
-            raise KeyError("Not all required features are available in the h5 file. Please run precompute_features.py.")
+            raise KeyError(
+                f"Not all required features are available in the h5 file. Please run precompute_features.py. "
+                f"Available timesteps: {available_timesteps}. "
+                f"Available features: {available_feature_names}. "
+                f"Required timestep: {self.timestep}. "
+                f"Required features: {self.feature_names}."
+                )
 
     def _get_required_feature_names(self):
         """Returns a set of required feature names."""
@@ -70,6 +76,13 @@ class FeatureLoader:
             timesteps = [int(timestep) for timestep in timesteps]
             features = [feature.split("_")[1] for feature in features]
         return timesteps, features
+    
+    @property
+    def feature_size(self):
+        """Returns the feature size."""
+        with h5py.File(self.h5_file, "r", swmr=True) as f:
+            dummy_features = self(list(f.keys())[0])
+            return dummy_features.unsqueeze(0).size()
 
     def __call__(self, image_name):
         """Loads features for a given image.
@@ -124,4 +137,4 @@ class FeatureLoader:
                     torch.from_numpy(feature).unsqueeze(0), size=self.resolution, mode="bilinear", align_corners=False
                 )
             )
-        return torch.cat(resized_features, dim=1)
+        return torch.cat(resized_features, dim=1).squeeze(0)

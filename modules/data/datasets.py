@@ -10,6 +10,8 @@ from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
 
+from modules.feature_loader import FeatureLoader
+
 
 class BaseTaskDataset(Dataset):
     """Base dataset class for downstream tasks. Child classes must implement __getitem__ and __len__.
@@ -32,9 +34,7 @@ class BaseTaskDataset(Dataset):
         super().__init__(*args, **kwargs)
 
         if mode not in ("train", "val", "test"):
-            raise ValueError(
-                f"mode must be one of (train, val, test). Given mode: {mode}"
-            )
+            raise ValueError(f"mode must be one of (train, val, test). Given mode: {mode}")
         if not root.exists() or not root.is_dir():
             raise FileNotFoundError(f"Root directory {root} is not valid.")
 
@@ -90,9 +90,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
                 # geometric
                 A.Flip(),
                 A.Rotate(limit=30),
-                A.Resize(
-                    512, 512
-                ),  # resize both image and mask to 512x512 before cropping
+                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
                 A.RandomResizedCrop(*self.size),
                 # color
                 A.ColorJitter(),
@@ -106,9 +104,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
         image = Image.open(image_path)
 
         label_path = self.labels[idx]
-        label = Image.open(
-            image_path.parent.parent / self.label_subfolder / label_path
-        ).convert("P")
+        label = Image.open(image_path.parent.parent / self.label_subfolder / label_path).convert("P")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(label))
@@ -159,14 +155,19 @@ class DepthDataset(BaseTaskDataset):
             ],
         )
 
+        self.depth_to_tensor = A.Compose(
+            [
+                A.Resize(*self.size),
+                ToTensorV2(transpose_mask=True),
+            ],
+        )
+
     def __getitem__(self, idx):
         image_path = self.images[idx]
         image = Image.open(image_path)
 
         depth_path = self.depths[idx]
-        depth = Image.open(
-            image_path.parent.parent / self.depth_subfolder / depth_path
-        ).convert("L")
+        depth = Image.open(image_path.parent.parent / self.depth_subfolder / depth_path).convert("L")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(depth))
@@ -175,9 +176,8 @@ class DepthDataset(BaseTaskDataset):
 
         transformed = self.to_tensor(image=np.array(image))
         image = transformed["image"]
-        depth = np.array(depth) / 127.5 - 1
-        depth = np.expand_dims(depth, axis=0)
-        depth = torch.from_numpy(depth).to(torch.float32)
+        depth = self.depth_to_tensor(image=np.array(depth))["image"]
+        depth = depth / 127.5 - 1
         return {"image": image, "label": depth, "name": image_path.name}
 
     def __len__(self):
@@ -225,9 +225,7 @@ class KeyPointDataset(BaseTaskDataset):
             keypoint = json.load(json_file)
 
         if self.mode == "train":
-            transformed = self.transforms(
-                image=np.array(image), keypoint=keypoint["keypoints"]
-            )
+            transformed = self.transforms(image=np.array(image), keypoint=keypoint["keypoints"])
             image = transformed["image"]
             keypoint = transformed["keypoint"]
 
@@ -246,3 +244,24 @@ class DatasetType(Enum):
     CelebAHQMask = CelebAHQMaskDataset
     Depth = DepthDataset
     KeyPoint = KeyPointDataset
+
+
+class DatasetWithFeatures(Dataset):
+    """Dataset class for downstream tasks with precomputed features.
+    Takes in a dataset object and a feature loader object.
+    Returns keys in the original dataset object and "features" for the features.
+    """
+
+    def __init__(self, dataset: Dataset, feature_loader: FeatureLoader):
+        super().__init__()
+        self.dataset = dataset
+        self.feature_loader = feature_loader
+
+    def __getitem__(self, idx):
+        data = self.dataset[idx]
+        features = self.feature_loader(data["name"])
+        data["features"] = features
+        return data
+
+    def __len__(self):
+        return len(self.dataset)
