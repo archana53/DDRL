@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 import torch
 from modules.data.datasets import CelebAHQMaskDataset, DepthDataset, KeyPointDataset
-from modules.decoders import ConvHead, MLPHead, PixelwiseMLPHead
+from modules.decoders import ConvHead, MLPHead, PixelwiseMLPHead, KeyPointHead
 from modules.trainer import PLModelTrainer
 from pathlib import Path
 import numpy as np
@@ -17,8 +17,8 @@ TASK_CONFIG = {
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
-        "head": None,
-        "criterion": None,
+        "head": KeyPointHead,
+        "criterion": torch.nn.MSELoss,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,

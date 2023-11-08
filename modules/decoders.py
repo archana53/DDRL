@@ -108,7 +108,7 @@ class KeyPointHead(nn.Module):
         self,
         pool_to,
         in_channels,
-        out_channels,
+        num_keypoints,
         hidden_channels1=256,
         hidden_channels2=128,
     ):
@@ -116,7 +116,7 @@ class KeyPointHead(nn.Module):
         :param pool_to: tuple of ints (height, width) (for rectangular image)
             or an int (for square image) to max pool the image to
         :param in_channels: number of input channels
-        :param out_channels: number of output channels
+        :param num_keypoints: number of keypoints to predict (2 coordinates are predicted per keypoint)
         :param hidden_channels1: number of hidden channels in the first MLP layer
         :param hidden_channels2: number of hidden channels in the second MLP layer
         """
@@ -128,7 +128,7 @@ class KeyPointHead(nn.Module):
             else pool_to * pool_to * in_channels
         )
         self.mlp = MLPHead(
-            mlp_in_channels, out_channels, hidden_channels1, hidden_channels2
+            mlp_in_channels, num_keypoints*2, hidden_channels1, hidden_channels2
         )
 
     def forward(self, x):

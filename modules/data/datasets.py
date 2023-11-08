@@ -255,7 +255,12 @@ class KeyPointDataset(BaseTaskDataset):
         transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
         keypoints = transformed["keypoints"]
-        return {"image": image, "label": keypoints}
+        unfolded_keypoints = []
+        for keypoint in keypoints:
+            unfolded_keypoints.append(keypoint[0])
+            unfolded_keypoints.append(keypoint[1])
+
+        return {"image": image, "label": unfolded_keypoints}
 
     def __len__(self):
         return len(self.image_paths)
