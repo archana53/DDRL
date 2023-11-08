@@ -69,14 +69,37 @@ class AFLWFace():
     def __repr__(self):
         return ('{name}(path={image_path}, face-id={face_id})'.format(name=self.__class__.__name__, **self.__dict__))
 
+def filter_images_with_single_face(faces):
+    image_paths = {}
+    for face in faces:
+        path = face.image_path
+        if path in image_paths.keys():
+            image_paths[path] = image_paths[path] + 1
+        else:
+            image_paths[path] = 1
+
+    images_to_use = set()
+
+    for path, num in image_paths.items():
+        if num == 1:
+            images_to_use.add(path)
+
+    save_faces = []
+    for face in faces:
+        if face.image_path in images_to_use:
+            save_faces.append(face)
+    return save_faces
 
 def save_to_list_file(root_dir, allfaces, lst_file, image_style_dir,
-                      annotation_dir, use_front, use_box):
+                      annotation_dir, use_front, use_box, use_single_face_images = True):
     # Filtering whether only front faces are to be used
     save_faces = []
     for face in allfaces:
         if use_front == False or face.check_front():
             save_faces.append(face)
+
+    if use_single_face_images is True:
+        save_faces = filter_images_with_single_face(save_faces)
     print('Prepare to save {} face images into {}'.format(len(save_faces), lst_file))
 
     with open(lst_file, 'w') as lst_file:

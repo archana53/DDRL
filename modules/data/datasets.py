@@ -192,18 +192,24 @@ class KeyPointDataset(BaseTaskDataset):
     """
     def validate_root(self, root):
         return not root.exists() or not root.is_file()
+
+    def get_bounding_box(self, ax, ay, bx, by):
+        return ((float(ax), float(ay)), (float(bx), float(by)))
     def get_file_info(self, ground_truth_file):
         with open(ground_truth_file) as file:
             ground_truths = [line.rstrip() for line in file]
 
         image_paths = []
         pts_paths = []
+        bounding_boxes = []
         for ground_truth in ground_truths:
             split_line = ground_truth.split(' ')
             image_paths.append(split_line[0])
             pts_paths.append(split_line[1])
+            bounding_box = self.get_bounding_box(split_line[2], split_line[3], split_line[4], split_line[5])
+            bounding_boxes.append(bounding_box)
 
-        return image_paths, pts_paths
+        return image_paths, pts_paths, bounding_boxes
     def get_image_path(self, idx):
         return self.file_info[idx][0]
 
@@ -219,13 +225,13 @@ class KeyPointDataset(BaseTaskDataset):
         return coords
     def __init__(self, *args, **kwargs):
         super(KeyPointDataset, self).__init__(*args, **kwargs)
-        self.image_paths, self.pts_paths = self.get_file_info(self.root)
+        self.image_paths, self.pts_paths, self.bounding_boxes = self.get_file_info(self.root)
         self.transforms = A.Compose(
             [
                 # geometric
                 A.Flip(),
                 A.Rotate(limit=30),
-                A.RandomResizedCrop(*self.size),
+                # No random crops to avoid missing out on keypoints
                 # color
                 A.ColorJitter(),
                 A.GaussianBlur(),
