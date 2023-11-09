@@ -29,6 +29,7 @@ TASK_CONFIG = {
         "dataloader": KeyPointDataset,
         "head": KeyPointHead,
         "criterion": torch.nn.MSELoss,
+        "out_channels": 19*2,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,

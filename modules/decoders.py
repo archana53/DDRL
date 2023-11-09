@@ -106,9 +106,9 @@ class KeyPointHead(nn.Module):
 
     def __init__(
         self,
-        pool_to,
+        # pool_to,
         in_channels,
-        num_keypoints,
+        out_channels = 38,
         hidden_channels1=256,
         hidden_channels2=128,
     ):
@@ -121,18 +121,19 @@ class KeyPointHead(nn.Module):
         :param hidden_channels2: number of hidden channels in the second MLP layer
         """
         super().__init__()
-        self.pool = nn.AdaptiveMaxPool2d(pool_to)
-        mlp_in_channels = (
-            pool_to[0] * pool_to[1] * in_channels
-            if isinstance(pool_to, tuple)
-            else pool_to * pool_to * in_channels
-        )
+        # self.pool = nn.AdaptiveMaxPool2d(pool_to)
+        # mlp_in_channels = (
+        #     pool_to[0] * pool_to[1] * in_channels
+        #     if isinstance(pool_to, tuple)
+        #     else pool_to * pool_to * in_channels
+        # )
         self.mlp = MLPHead(
-            mlp_in_channels, num_keypoints*2, hidden_channels1, hidden_channels2
+            # mlp_in_channels,
+            in_channels, out_channels, hidden_channels1, hidden_channels2
         )
 
     def forward(self, x):
-        x = self.pool(x)
+        # x = self.pool(x)
         x = x.view(x.size(0), -1)
         x = self.mlp(x)
         return x
