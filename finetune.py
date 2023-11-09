@@ -1,14 +1,21 @@
 import argparse
 import pytorch_lightning as pl
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
+from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
-from modules.data.datasets import CelebAHQMaskDataset, DepthDataset, KeyPointDataset, DatasetWithFeatures
+from modules.data.datasets import (
+    CelebAHQMaskDataset,
+    DepthDataset,
+    KeyPointDataset,
+    DatasetWithFeatures,
+)
 from modules.feature_loader import FeatureLoader
 from modules.decoders import ConvHead, MLPHead, PixelwiseMLPHead
 from modules.trainer import PLModelTrainer
 from pathlib import Path
 import numpy as np
 import torch.utils.data as data
+import os
 
 
 TASK_CONFIG = {
@@ -33,18 +40,28 @@ TASK_CONFIG = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune pre-trained diffusion features on a downstream task")
+    parser = argparse.ArgumentParser(
+        description="Finetune pre-trained diffusion features on a downstream task"
+    )
 
     # Feature extraction Parameters
     feature_extraction_group = parser.add_argument_group("Feature Extraction Arguments")
 
     # Diffusion or Feature Loader in a mutually exclusive group
-    extraction_method_specifc_group = feature_extraction_group.add_mutually_exclusive_group()
-    extraction_method_specifc_group.add_argument(
-        "--use_diffusion", "-d", action="store_true", help="Use Diffusion Backbone to extract features"
+    extraction_method_specifc_group = (
+        feature_extraction_group.add_mutually_exclusive_group()
     )
     extraction_method_specifc_group.add_argument(
-        "--use_feature_loader", "-l", action="store_true", help="Use Feature Loader to load features"
+        "--use_diffusion",
+        "-d",
+        action="store_true",
+        help="Use Diffusion Backbone to extract features",
+    )
+    extraction_method_specifc_group.add_argument(
+        "--use_feature_loader",
+        "-l",
+        action="store_true",
+        help="Use Feature Loader to load features",
     )
 
     # Diffusion Parameters
@@ -54,13 +71,19 @@ def parse_args():
         action="store_true",
         help="Conditional/Unconditional Diffusion",
     )
-    feature_extraction_group.add_argument("--model_path", type=str, help="Path to model")
+    feature_extraction_group.add_argument(
+        "--model_path", type=str, help="Path to model"
+    )
 
     # Feature Loader Parameters
-    feature_extraction_group.add_argument("--feature_store_path", type=str, help="Path to h5 file containing features")
+    feature_extraction_group.add_argument(
+        "--feature_store_path", type=str, help="Path to h5 file containing features"
+    )
 
     # General feature extraction parameters
-    feature_extraction_group.add_argument("--img_res", type=int, default=256, help="Image resolution")
+    feature_extraction_group.add_argument(
+        "--img_res", type=int, default=256, help="Image resolution"
+    )
     feature_extraction_group.add_argument(
         "--scale_direction",
         type=str,
@@ -99,18 +122,37 @@ def parse_args():
 
     # Training Parameters
     training_group = parser.add_argument_group("train_args")
-    training_group.add_argument("--create_dataset_splits", action="store_true", help="Create dataset splits")
     training_group.add_argument(
-        "--full_finetuning", "-f", action="store_true", help="If true, finetune diffusion model as well"
+        "--create_dataset_splits", action="store_true", help="Create dataset splits"
     )
-    training_group.add_argument("--lora_rank", type=int, default=4, help="Rank of LoRA layer")
-    training_group.add_argument("--optimizer", type=str, default="Adam", help="Optimizer to use")
+    training_group.add_argument(
+        "--full_finetuning",
+        "-f",
+        action="store_true",
+        help="If true, finetune diffusion model as well",
+    )
+    training_group.add_argument(
+        "--lora_rank", type=int, default=4, help="Rank of LoRA layer"
+    )
+    training_group.add_argument(
+        "--optimizer", type=str, default="Adam", help="Optimizer to use"
+    )
     training_group.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    training_group.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
-    training_group.add_argument("--precision", type=str, default="32-true", help="Precision for training")
-    training_group.add_argument("--max_epochs", type=int, default=100, help="Number of epochs to train for")
-    training_group.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use")
-    training_group.add_argument("--num_workers", type=int, default=4, help="Number of workers for dataloader")
+    training_group.add_argument(
+        "--batch_size", type=int, default=16, help="Batch size for training"
+    )
+    training_group.add_argument(
+        "--precision", type=str, default="32-true", help="Precision for training"
+    )
+    training_group.add_argument(
+        "--max_steps", type=int, default=30000, help="Number of steps to train for"
+    )
+    training_group.add_argument(
+        "--gpus", type=int, default=1, help="Number of GPUs to use"
+    )
+    training_group.add_argument(
+        "--num_workers", type=int, default=4, help="Number of workers for dataloader"
+    )
 
     args = parser.parse_args()
     return args
@@ -142,7 +184,9 @@ def setup_feature_loader(args):
 
 
 def setup_dataloaders(dataset_cls, args, feature_loader=None):
-    task_dataset = dataset_cls(root=Path(args.root_path), mode="val", size=(args.img_res, args.img_res))
+    task_dataset = dataset_cls(
+        root=Path(args.root_path), mode="val", size=(args.img_res, args.img_res)
+    )
 
     # create dataset splits optionally
     # TODO: check if any dataset has splits already
@@ -150,14 +194,19 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
     task_val_dataset, task_test_dataset = None, None
     if args.create_dataset_splits:
         task_train_dataset, task_val_dataset, task_test_dataset = data.random_split(
-            task_dataset, [0.8, 0.2 * 0.33, 0.2 * 0.67], generator=torch.Generator().manual_seed(42)
+            task_dataset,
+            [0.8, 0.2 * 0.33, 0.2 * 0.67],
+            generator=torch.Generator().manual_seed(42),
         )
     datasets = [task_train_dataset, task_val_dataset, task_test_dataset]
 
     # create a DatasetWithFeatures object if using feature loader
     if feature_loader is not None:
         datasets = [
-            DatasetWithFeatures(dataset, feature_loader) if dataset is not None else None for dataset in datasets
+            DatasetWithFeatures(dataset, feature_loader)
+            if dataset is not None
+            else None
+            for dataset in datasets
         ]
 
     # create dataloaders
@@ -189,6 +238,9 @@ if __name__ == "__main__":
     all_trainable_params = []
     feature_size = None
 
+    # Setup experiment name
+    experiment_name = f"{args.name}_timestep={args.time_step}_scales={args.scales}_scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+
     if args.use_diffusion:
         model = setup_diffusion_model(args, device)
         feature_size = model.feature_size
@@ -204,20 +256,43 @@ if __name__ == "__main__":
     # Setup Finetuning Task Dataloader and Head
     task_config = TASK_CONFIG[args.name]
     task_dataset_cls = task_config["dataloader"]
-    task_train_dataloader, task_val_dataloader, task_test_dataloader = setup_dataloaders(
-        task_dataset_cls, args, feature_loader
-    )
+    (
+        task_train_dataloader,
+        task_val_dataloader,
+        task_test_dataloader,
+    ) = setup_dataloaders(task_dataset_cls, args, feature_loader)
 
     in_features = feature_size[1]
     out_features = task_config["out_channels"]
 
-    task_head = task_config["head"](in_channels=in_features, out_channels=out_features)  # .to(device)
+    task_head = task_config["head"](
+        in_channels=in_features, out_channels=out_features
+    )  # .to(device)
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
 
+    # Initialise Logger
+    log_dir = f"logs/{experiment_name}"
+
+    # Initialize ModelCheckpoint callback
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=os.path.join("checkpoints", experiment_name),
+        filename="{epoch}-{val_loss:.2f}",
+        save_top_k=3,
+        monitor="val_loss",
+        mode="min",
+    )
+
     # Initialize the trainer
-    trainer = pl.Trainer(devices=args.gpus, max_epochs=args.max_epochs)
+    trainer = pl.Trainer(
+        devices=args.gpus,
+        max_steps=args.max_steps,
+        default_root_dir=log_dir,
+        log_every_n_steps=50,
+        val_check_interval=1000,
+        callbacks=[checkpoint_callback],
+    )
 
     # Initialize the model
     model_trainer = PLModelTrainer(
@@ -230,4 +305,8 @@ if __name__ == "__main__":
     )
 
     # Train the model
-    trainer.fit(model_trainer, train_dataloaders=task_train_dataloader)
+    trainer.fit(
+        model_trainer,
+        train_dataloaders=task_train_dataloader,
+        val_dataloaders=task_val_dataloader,
+    )
