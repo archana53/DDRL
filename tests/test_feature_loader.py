@@ -39,7 +39,7 @@ class TestFeatureLoader(unittest.TestCase):
             self.h5_file, scales=[1, 2], scale_directions=["xy", "xt"], timestep=0, resolution=(100, 100)
         )
         features = feature_loader("image1")
-        self.assertEqual(features.shape, (1, 16, 100, 100))
+        self.assertEqual(features.shape, (16, 100, 100))
 
     def test_load_features_multiple_images(self):
         # Test loading features for multiple images
@@ -48,8 +48,8 @@ class TestFeatureLoader(unittest.TestCase):
         )
         features1 = feature_loader("image1")
         features2 = feature_loader("image2")
-        self.assertEqual(features1.shape, (1, 8, 100, 100))
-        self.assertEqual(features2.shape, (1, 8, 100, 100))
+        self.assertEqual(features1.shape, (8, 100, 100))
+        self.assertEqual(features2.shape, (8, 100, 100))
 
     def test_load_features_missing_scale(self):
         # Test loading features with a missing scale
