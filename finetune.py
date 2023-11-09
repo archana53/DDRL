@@ -240,8 +240,10 @@ if __name__ == "__main__":
     feature_size = None
 
     # Setup experiment name
-    experiment_name = f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
-    f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+    experiment_name = (
+        f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
+        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+    )
 
     if args.use_diffusion:
         model = setup_diffusion_model(args, device)
