@@ -232,6 +232,7 @@ class KeyPointDataset(BaseTaskDataset):
                 # geometric
                 A.Flip(),
                 A.Rotate(limit=30),
+                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
                 # No random crops to avoid missing out on keypoints
                 # color
                 A.ColorJitter(),
