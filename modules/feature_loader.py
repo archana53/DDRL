@@ -82,6 +82,7 @@ class FeatureLoader:
         """Returns the feature size."""
         with h5py.File(self.h5_file, "r", swmr=True) as f:
             dummy_features = self(list(f.keys())[0])
+            dummy_features = self._resize_and_concatenate(dummy_features)
             return dummy_features.unsqueeze(0).size()
 
     def __call__(self, image_name):
@@ -93,7 +94,6 @@ class FeatureLoader:
         """
         features = self._load_features(image_name)
         features = self._filter_features(features)
-        features = self._resize_and_concatenate(features)
         return features
 
     def _load_features(self, image_name):

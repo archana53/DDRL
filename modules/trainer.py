@@ -1,11 +1,11 @@
 import pytorch_lightning as pl
 import torch
 
+import torch.nn.functional as F
+
 
 class PLModelTrainer(pl.LightningModule):
-    def __init__(
-        self, backbone, head, criterion, optimizer, timestep=10, metrics=None, use_precomputed_features=False
-    ):
+    def __init__(self, backbone, head, criterion, optimizer, timestep=10, metrics=None, use_precomputed_features=False):
         super(PLModelTrainer, self).__init__()
         self.head = head
         self.criterion = criterion
@@ -19,12 +19,12 @@ class PLModelTrainer(pl.LightningModule):
         self.configure_optimizers()
 
     def compute_features(self, *, x=None, features=None):
-        _, features = self.backbone.get_features(
-            x, self.time_step.to(x.device)
-        )
+        _, features = self.backbone.get_features(x, self.time_step.to(x.device))
         return features
-    
+
     def load_features(self, *, x=None, features=None):
+        features = [F.interpolate(f, size=x.shape[-2:], mode="bilinear", align_corners=False) for f in features]
+        features = torch.cat(features, dim=1)
         return features
 
     def forward(self, x, features=None):
