@@ -1,22 +1,23 @@
 import argparse
+import os
+from pathlib import Path
+
+import numpy as np
 import pytorch_lightning as pl
-from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
-from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
+import torch.utils.data as data
+from pytorch_lightning.callbacks import ModelCheckpoint
+
 from modules.data.datasets import (
     CelebAHQMaskDataset,
+    DatasetWithFeatures,
     DepthDataset,
     KeyPointDataset,
-    DatasetWithFeatures,
 )
+from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
-from modules.decoders import ConvHead, MLPHead, PixelwiseMLPHead
+from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
-from pathlib import Path
-import numpy as np
-import torch.utils.data as data
-import os
-
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -32,8 +33,8 @@ TASK_CONFIG = {
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
-        "head": None,
-        "criterion": None,
+        "head": PixelwiseMLPHead,
+        "criterion": torch.nn.CrossEntropyLoss,
         "out_channels": 19,  # 19 classes
     },
 }
@@ -239,7 +240,8 @@ if __name__ == "__main__":
     feature_size = None
 
     # Setup experiment name
-    experiment_name = f"{args.name}_timestep={args.time_step}_scales={args.scales}_scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+    experiment_name = f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
+    f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
 
     if args.use_diffusion:
         model = setup_diffusion_model(args, device)
@@ -267,7 +269,7 @@ if __name__ == "__main__":
 
     task_head = task_config["head"](
         in_channels=in_features, out_channels=out_features
-    )  # .to(device)
+    ) 
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
