@@ -90,16 +90,23 @@ def filter_images_with_single_face(faces):
             save_faces.append(face)
     return save_faces
 
-def save_to_list_file(root_dir, allfaces, lst_file, image_style_dir,
-                      annotation_dir, use_front, use_box, use_single_face_images = True):
-    # Filtering whether only front faces are to be used
+def filter_images_with_front_face(allfaces, use_front):
     save_faces = []
     for face in allfaces:
         if use_front == False or face.check_front():
             save_faces.append(face)
+    return save_faces
+
+def save_to_list_file(root_dir, allfaces, lst_file, image_style_dir,
+                      annotation_dir, use_front, use_box, use_single_face_images = True):
+    # Filtering whether only front faces are to be used
+    save_faces = []
 
     if use_single_face_images is True:
-        save_faces = filter_images_with_single_face(save_faces)
+        save_faces = filter_images_with_single_face(allfaces)
+
+    save_faces = filter_images_with_front_face(save_faces, use_front)
+
     print('Prepare to save {} face images into {}'.format(len(save_faces), lst_file))
 
     with open(lst_file, 'w') as lst_file:

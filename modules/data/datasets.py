@@ -6,6 +6,7 @@ from enum import Enum
 import torch
 import albumentations as A
 import numpy as np
+import torchvision.transforms
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
@@ -194,8 +195,10 @@ class KeyPointDataset(BaseTaskDataset):
     def validate_root(self, root):
         return not root.exists() or not root.is_file()
 
+    def parse_coordinate(self, coord):
+        return int(float(coord))
     def get_bounding_box(self, ax, ay, bx, by):
-        return ((float(ax), float(ay)), (float(bx), float(by)))
+        return self.parse_coordinate(ax), self.parse_coordinate(ay), self.parse_coordinate(bx), self.parse_coordinate(by)
     def get_file_info(self, ground_truth_file):
         with open(ground_truth_file) as file:
             ground_truths = [line.rstrip() for line in file]
@@ -211,8 +214,8 @@ class KeyPointDataset(BaseTaskDataset):
             bounding_boxes.append(bounding_box)
 
         return image_paths, pts_paths, bounding_boxes
-    def get_image_path(self, idx):
-        return self.file_info[idx][0]
+    # def get_image_path(self, idx):
+    #     return self.file_info[idx][0]
 
     def get_keypoints(self, pts_path):
         with open(pts_path) as file:
@@ -250,6 +253,18 @@ class KeyPointDataset(BaseTaskDataset):
         keypoints = self.get_keypoints(keypoint_path)
 
         if self.mode == "train":
+            bounding_box_crop = A.Compose(
+                [
+                    A.Crop(x_min=self.bounding_boxes[idx][0],
+                           y_min=self.bounding_boxes[idx][1],
+                           x_max=self.bounding_boxes[idx][2],
+                           y_max=self.bounding_boxes[idx][3])
+                ],
+                keypoint_params=A.KeypointParams(format="xy")
+            )
+            box_crop_transformed = bounding_box_crop(image=np.array(image), keypoints=keypoints)
+            image = box_crop_transformed["image"]
+            keypoints = box_crop_transformed["keypoints"]
             transformed = self.transforms(image=np.array(image), keypoints=keypoints)
             image = transformed["image"]
             keypoints = transformed["keypoints"]
