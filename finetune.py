@@ -18,6 +18,7 @@ from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
+from modules.metrics import mIOU, MSE
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -25,17 +26,20 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 1,
+        "metrics": MSE,
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
         "head": None,
         "criterion": None,
+        "metrics": lambda y_pred, y_true : 0,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.CrossEntropyLoss,
         "out_channels": 19,  # 19 classes
+        "metrics": mIOU,
     },
 }
 
@@ -306,6 +310,7 @@ if __name__ == "__main__":
         optimizer,
         timestep=args.time_step,
         use_precomputed_features=args.use_feature_loader,
+        metrics=task_config["metrics"],
     )
 
     # Train the model
