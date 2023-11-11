@@ -12,7 +12,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from enum import Enum
 from modules.feature_loader import FeatureLoader
-from utils import generate_gaussian_heatmap
+from modules.data.utils import generate_gaussian_heatmap
 
 class BaseTaskDataset(Dataset):
     """Base dataset class for downstream tasks. Child classes must implement __getitem__ and __len__.
@@ -244,6 +244,12 @@ class KeyPointDataset(BaseTaskDataset):
             keypoint_params=A.KeypointParams(format="xy"),
         )
         self.gaussian_sigma = 5 if 'sigma' not in kwargs.keys() else kwargs['sigma']
+        self.keypoints_to_tensor = A.Compose(
+            [
+                A.Resize(*self.size),
+                ToTensorV2(transpose_mask=True),
+            ],
+        )
 
     """
         keypoints follow a origin in the top left structure, whereas the gaussian map algorithm
@@ -287,10 +293,14 @@ class KeyPointDataset(BaseTaskDataset):
         shifted_keypoints = self.get_shifted_coords(image, keypoints)
         keypoint_gaussians = []
         for keypoint in shifted_keypoints:
-            keypoint_gaussians.append(generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0], keypoint[1], self.gaussian_sigma))
+            keypoint_gaussian = generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0], keypoint[1], self.gaussian_sigma)
+            keypoint_gaussian = self.keypoints_to_tensor(image=np.array(keypoint_gaussian))["image"]
+            keypoint_gaussians.append(keypoint_gaussian)
 
-        return {"image": image, "label": keypoint_gaussians, "final_keypoints": keypoints}
-
+        keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
+        return {"image": image, "label": keypoint_gaussians_tensor
+            # , "final_keypoints": keypoints}
+                }
     def __len__(self):
         return len(self.image_paths)
 

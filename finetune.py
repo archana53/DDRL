@@ -28,9 +28,9 @@ TASK_CONFIG = {
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
-        "head": KeyPointHead,
+        "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
-        "out_channels": 19*2,
+        "out_channels": 19,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,

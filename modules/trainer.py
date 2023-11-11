@@ -63,6 +63,9 @@ class PLModelTrainer(pl.LightningModule):
         x, y = batch["image"], batch["label"]
         features = batch.get("features", None)
         y_hat = self.forward(x, features=features)
+        print(type(y))
+        print(y_hat.size())
+        print(y.size())
         loss = self.criterion(y_hat, y)
         self.log("val_loss", loss)
         return {"loss": loss}

@@ -2,3 +2,4 @@ modules/data/aflw_dataset
 .idea/
 __pycache__/
 .ipynb_checkpoints/
+logs/
