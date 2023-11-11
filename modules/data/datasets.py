@@ -12,7 +12,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from enum import Enum
 from modules.feature_loader import FeatureLoader
-
+from utils import generate_gaussian_heatmap
 
 class BaseTaskDataset(Dataset):
     """Base dataset class for downstream tasks. Child classes must implement __getitem__ and __len__.
@@ -243,7 +243,18 @@ class KeyPointDataset(BaseTaskDataset):
             ],
             keypoint_params=A.KeypointParams(format="xy"),
         )
+        self.gaussian_sigma = 5 if 'sigma' not in kwargs.keys() else kwargs['sigma']
 
+    """
+        keypoints follow a origin in the top left structure, whereas the gaussian map algorithm
+        assumes origin in the center formulation, in a [-1, 1] range  so this shifts all keypoints to the new origin
+        and scales it to -1, 1
+    """
+    def get_shifted_coords(self, image, coords):
+            shift_amount_0 = image.size()[1]
+            shift_amount_1 = image.size()[2]
+            return [((2*x[0] - shift_amount_0 ) / shift_amount_0, (2*x[1] - shift_amount_1) / shift_amount_1) for x in
+                    coords]
     def __getitem__(self, idx):
         # TODO: test this
         image_path = self.image_paths[idx]
@@ -272,12 +283,13 @@ class KeyPointDataset(BaseTaskDataset):
         transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
         keypoints = transformed["keypoints"]
-        unfolded_keypoints = []
-        for keypoint in keypoints:
-            unfolded_keypoints.append(keypoint[0])
-            unfolded_keypoints.append(keypoint[1])
 
-        return {"image": image, "label": unfolded_keypoints}
+        shifted_keypoints = self.get_shifted_coords(image, keypoints)
+        keypoint_gaussians = []
+        for keypoint in shifted_keypoints:
+            keypoint_gaussians.append(generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0], keypoint[1], self.gaussian_sigma))
+
+        return {"image": image, "label": keypoint_gaussians, "final_keypoints": keypoints}
 
     def __len__(self):
         return len(self.image_paths)
