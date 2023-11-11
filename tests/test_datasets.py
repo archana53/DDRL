@@ -31,7 +31,7 @@ class TestCelebAHQMaskDataset(unittest.TestCase):
         self.assertIsInstance(sample["label"], torch.Tensor)
         self.assertIsInstance(sample["name"], str)
         self.assertEqual(sample["image"].shape, (3, 256, 256))
-        self.assertEqual(sample["label"].shape, (1, 256, 256))
+        self.assertEqual(sample["label"].shape, (256, 256))
 
 
 
