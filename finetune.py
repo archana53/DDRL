@@ -1,27 +1,30 @@
 import argparse
+import os
+from pathlib import Path
+
+import numpy as np
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
-from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 import torch
+import torch.utils.data as data
+from pytorch_lightning.callbacks import ModelCheckpoint
+
 from modules.data.datasets import (
     CelebAHQMaskDataset,
+    DatasetWithFeatures,
     DepthDataset,
     KeyPointDataset,
-    DatasetWithFeatures,
 )
+from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
-from modules.decoders import ConvHead, MLPHead, PixelwiseMLPHead
+from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
-from pathlib import Path
-import numpy as np
-import torch.utils.data as data
-import os
 
 TASK_CONFIG = {
     "Depth_Estimation": {
         "dataloader": DepthDataset,
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
+        "out_channels": 1,
         "out_channels": 1,
     },
     "Facial_Keypoint_Detection": {
@@ -31,8 +34,8 @@ TASK_CONFIG = {
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
-        "head": None,
-        "criterion": None,
+        "head": PixelwiseMLPHead,
+        "criterion": torch.nn.CrossEntropyLoss,
         "out_channels": 19,  # 19 classes
     },
 }
@@ -47,9 +50,7 @@ def parse_args():
     feature_extraction_group = parser.add_argument_group("Feature Extraction Arguments")
 
     # Diffusion or Feature Loader in a mutually exclusive group
-    extraction_method_specifc_group = (
-        feature_extraction_group.add_mutually_exclusive_group()
-    )
+    extraction_method_specifc_group = feature_extraction_group.add_mutually_exclusive_group()
     extraction_method_specifc_group.add_argument(
         "--use_diffusion",
         "-d",
@@ -70,9 +71,7 @@ def parse_args():
         action="store_true",
         help="Conditional/Unconditional Diffusion",
     )
-    feature_extraction_group.add_argument(
-        "--model_path", type=str, help="Path to model"
-    )
+    feature_extraction_group.add_argument("--model_path", type=str, help="Path to model")
 
     # Feature Loader Parameters
     feature_extraction_group.add_argument(
@@ -130,12 +129,8 @@ def parse_args():
         action="store_true",
         help="If true, finetune diffusion model as well",
     )
-    training_group.add_argument(
-        "--lora_rank", type=int, default=4, help="Rank of LoRA layer"
-    )
-    training_group.add_argument(
-        "--optimizer", type=str, default="Adam", help="Optimizer to use"
-    )
+    training_group.add_argument("--lora_rank", type=int, default=4, help="Rank of LoRA layer")
+    training_group.add_argument("--optimizer", type=str, default="Adam", help="Optimizer to use")
     training_group.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     training_group.add_argument(
         "--batch_size", type=int, default=16, help="Batch size for training"
@@ -146,9 +141,7 @@ def parse_args():
     training_group.add_argument(
         "--max_steps", type=int, default=30000, help="Number of steps to train for"
     )
-    training_group.add_argument(
-        "--gpus", type=int, default=1, help="Number of GPUs to use"
-    )
+    training_group.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use")
     training_group.add_argument(
         "--num_workers", type=int, default=4, help="Number of workers for dataloader"
     )
@@ -202,9 +195,7 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
     # create a DatasetWithFeatures object if using feature loader
     if feature_loader is not None:
         datasets = [
-            DatasetWithFeatures(dataset, feature_loader)
-            if dataset is not None
-            else None
+            DatasetWithFeatures(dataset, feature_loader) if dataset is not None else None
             for dataset in datasets
         ]
 
@@ -229,9 +220,6 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
 if __name__ == "__main__":
     args = parse_args()
 
-    # Setup experiment name
-    experiment_name = f"{args.name}_timestep={args.time_step}_scales={args.scales}_scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
-
     device = "cpu"  # TODO CHANGE BACK TO DEVICE
 
     # Set up feature extraction method
@@ -239,6 +227,12 @@ if __name__ == "__main__":
     feature_loader = None
     all_trainable_params = []
     feature_size = None
+
+    # Setup experiment name
+    experiment_name = (
+        f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
+        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+    )
 
     if args.use_diffusion:
         model = setup_diffusion_model(args, device)
@@ -264,9 +258,7 @@ if __name__ == "__main__":
     in_features = feature_size[1]
     out_features = task_config["out_channels"]
 
-    task_head = task_config["head"](
-        in_channels=in_features, out_channels=out_features
-    )  # .to(device)
+    task_head = task_config["head"](in_channels=in_features, out_channels=out_features)
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
@@ -289,7 +281,7 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         default_root_dir=log_dir,
         log_every_n_steps=50,
-        val_check_interval=1,
+        val_check_interval=1000,
         callbacks=[checkpoint_callback],
     )
 

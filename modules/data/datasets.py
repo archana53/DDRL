@@ -113,7 +113,7 @@ class CelebAHQMaskDataset(BaseTaskDataset):
 
         transformed = self.to_tensor(image=np.array(image), mask=np.array(label))
         image = transformed["image"]
-        label = transformed["mask"].unsqueeze(0).long()
+        label = transformed["mask"].long()
         return {"image": image, "label": label, "name": image_path.name}
 
     def __len__(self):
