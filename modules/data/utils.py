@@ -42,9 +42,12 @@ def PTSconvert2box(points, expand_ratio=None):
         box[3] = int(math.ceil(box[3] + H * expand_ratio))
     return box
 
+
 # A gaussian kernel cache, so we don't have to regenerate them every time.
 # This is only a small optimization, generating the kernels is pretty fast.
 _gaussians = {}
+
+
 def generate_gaussian_heatmap(t, x, y, sigma=10):
     """
     Generates a 2D Gaussian point at location x,y in tensor t.
@@ -53,7 +56,7 @@ def generate_gaussian_heatmap(t, x, y, sigma=10):
 
     sigma is the standard deviation of the generated 2D Gaussian.
     """
-    h,w = t.shape
+    h, w = t.shape
 
     # Heatmap pixel per output pixel
     mu_x = int(0.5 * (x + 1.) * w)
@@ -62,7 +65,7 @@ def generate_gaussian_heatmap(t, x, y, sigma=10):
     tmp_size = sigma * 3
 
     # Top-left
-    x1,y1 = int(mu_x - tmp_size), int(mu_y - tmp_size)
+    x1, y1 = int(mu_x - tmp_size), int(mu_y - tmp_size)
 
     # Bottom right
     x2, y2 = int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)
@@ -76,7 +79,7 @@ def generate_gaussian_heatmap(t, x, y, sigma=10):
 
     # The gaussian is not normalized, we want the center value to equal 1
     g = _gaussians[sigma] if sigma in _gaussians \
-                else torch.Tensor(np.exp(- ((tx - x0) ** 2 + (ty - y0) ** 2) / (2 * sigma ** 2)))
+        else torch.Tensor(np.exp(- ((tx - x0) ** 2 + (ty - y0) ** 2) / (2 * sigma ** 2)))
     _gaussians[sigma] = g
 
     # Determine the bounds of the source gaussian
@@ -88,6 +91,6 @@ def generate_gaussian_heatmap(t, x, y, sigma=10):
     img_y_min, img_y_max = max(0, y1), min(y2, h)
 
     t[img_y_min:img_y_max, img_x_min:img_x_max] = \
-      g[g_y_min:g_y_max, g_x_min:g_x_max]
+        g[g_y_min:g_y_max, g_x_min:g_x_max]
 
     return t

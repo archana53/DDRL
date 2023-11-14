@@ -34,7 +34,6 @@ class TestCelebAHQMaskDataset(unittest.TestCase):
         self.assertEqual(sample["label"].shape, (256, 256))
 
 
-
 class TestDepthDataset(unittest.TestCase):
     def setUp(self):
         self.dataset = DepthDataset(root=BIWI_PATH, size=(256, 256), mode="train")
@@ -54,9 +53,11 @@ class TestDepthDataset(unittest.TestCase):
         self.assertEqual(sample["image"].shape, (3, 256, 256))
         self.assertEqual(sample["label"].shape, (1, 256, 256))
 
+
 class TestALFWDataset(unittest.TestCase):
     def setUp(self):
         self.dataset = KeyPointDataset(root=Path("resources/test_keypoint.GTB"), mode="train")
+
     def test_len(self):
         self.assertEqual(len(self.dataset), 4)
 

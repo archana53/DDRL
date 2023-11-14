@@ -14,6 +14,7 @@ from enum import Enum
 from modules.feature_loader import FeatureLoader
 from modules.data.utils import generate_gaussian_heatmap
 
+
 class BaseTaskDataset(Dataset):
     """Base dataset class for downstream tasks. Child classes must implement __getitem__ and __len__.
     Override augmentations in child classes.
@@ -26,13 +27,14 @@ class BaseTaskDataset(Dataset):
 
     def validate_root(self, root):
         return not root.exists() or not root.is_dir()
+
     def __init__(
-        self,
-        root: pathlib.Path,
-        size: Tuple[int, int] = (256, 256),
-        mode: str = "train",
-        *args,
-        **kwargs,
+            self,
+            root: pathlib.Path,
+            size: Tuple[int, int] = (256, 256),
+            mode: str = "train",
+            *args,
+            **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
@@ -192,13 +194,17 @@ class KeyPointDataset(BaseTaskDataset):
     """Dataset class for single image facial keypoint estimation.
     Returns a dict with keys "image" and "label" for the image and keypoint map respectively.
     """
+
     def validate_root(self, root):
         return not root.exists() or not root.is_file()
 
     def parse_coordinate(self, coord):
         return int(float(coord))
+
     def get_bounding_box(self, ax, ay, bx, by):
-        return self.parse_coordinate(ax), self.parse_coordinate(ay), self.parse_coordinate(bx), self.parse_coordinate(by)
+        return self.parse_coordinate(ax), self.parse_coordinate(ay), self.parse_coordinate(bx), self.parse_coordinate(
+            by)
+
     def get_file_info(self, ground_truth_file):
         with open(ground_truth_file) as file:
             ground_truths = [line.rstrip() for line in file]
@@ -214,6 +220,7 @@ class KeyPointDataset(BaseTaskDataset):
             bounding_boxes.append(bounding_box)
 
         return image_paths, pts_paths, bounding_boxes
+
     # def get_image_path(self, idx):
     #     return self.file_info[idx][0]
 
@@ -227,7 +234,8 @@ class KeyPointDataset(BaseTaskDataset):
             coords.append((float(split_line[1]), float(split_line[2])))
 
         return coords
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, gaussian_sigma=5, *args, **kwargs):
         super(KeyPointDataset, self).__init__(*args, **kwargs)
         self.image_paths, self.pts_paths, self.bounding_boxes = self.get_file_info(self.root)
         self.transforms = A.Compose(
@@ -243,7 +251,7 @@ class KeyPointDataset(BaseTaskDataset):
             ],
             keypoint_params=A.KeypointParams(format="xy"),
         )
-        self.gaussian_sigma = 5 if 'sigma' not in kwargs.keys() else kwargs['sigma']
+        self.gaussian_sigma = gaussian_sigma
         self.keypoints_to_tensor = A.Compose(
             [
                 A.Resize(*self.size),
@@ -256,11 +264,13 @@ class KeyPointDataset(BaseTaskDataset):
         assumes origin in the center formulation, in a [-1, 1] range  so this shifts all keypoints to the new origin
         and scales it to -1, 1
     """
+
     def get_shifted_coords(self, image, coords):
-            shift_amount_0 = image.size()[1]
-            shift_amount_1 = image.size()[2]
-            return [((2*x[0] - shift_amount_0 ) / shift_amount_0, (2*x[1] - shift_amount_1) / shift_amount_1) for x in
-                    coords]
+        shift_amount_0 = image.size()[1]
+        shift_amount_1 = image.size()[2]
+        return [((2 * x[0] - shift_amount_0) / shift_amount_0, (2 * x[1] - shift_amount_1) / shift_amount_1) for x in
+                coords]
+
     def __getitem__(self, idx):
         # TODO: test this
         image_path = self.image_paths[idx]
@@ -269,19 +279,20 @@ class KeyPointDataset(BaseTaskDataset):
         image = Image.open(image_path)
         keypoints = self.get_keypoints(keypoint_path)
 
+        bounding_box_crop = A.Compose(
+            [
+                A.Crop(x_min=self.bounding_boxes[idx][0],
+                       y_min=self.bounding_boxes[idx][1],
+                       x_max=self.bounding_boxes[idx][2],
+                       y_max=self.bounding_boxes[idx][3])
+            ],
+            keypoint_params=A.KeypointParams(format="xy")
+        )
+        box_crop_transformed = bounding_box_crop(image=np.array(image), keypoints=keypoints)
+        image = box_crop_transformed["image"]
+        keypoints = box_crop_transformed["keypoints"]
+
         if self.mode == "train":
-            bounding_box_crop = A.Compose(
-                [
-                    A.Crop(x_min=self.bounding_boxes[idx][0],
-                           y_min=self.bounding_boxes[idx][1],
-                           x_max=self.bounding_boxes[idx][2],
-                           y_max=self.bounding_boxes[idx][3])
-                ],
-                keypoint_params=A.KeypointParams(format="xy")
-            )
-            box_crop_transformed = bounding_box_crop(image=np.array(image), keypoints=keypoints)
-            image = box_crop_transformed["image"]
-            keypoints = box_crop_transformed["keypoints"]
             transformed = self.transforms(image=np.array(image), keypoints=keypoints)
             image = transformed["image"]
             keypoints = transformed["keypoints"]
@@ -293,14 +304,16 @@ class KeyPointDataset(BaseTaskDataset):
         shifted_keypoints = self.get_shifted_coords(image, keypoints)
         keypoint_gaussians = []
         for keypoint in shifted_keypoints:
-            keypoint_gaussian = generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0], keypoint[1], self.gaussian_sigma)
+            keypoint_gaussian = generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0],
+                                                          keypoint[1], self.gaussian_sigma)
             keypoint_gaussian = self.keypoints_to_tensor(image=np.array(keypoint_gaussian))["image"]
             keypoint_gaussians.append(keypoint_gaussian)
 
         keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
         return {"image": image, "label": keypoint_gaussians_tensor
-            # , "final_keypoints": keypoints}
+                # , "final_keypoints": keypoints}
                 }
+
     def __len__(self):
         return len(self.image_paths)
 

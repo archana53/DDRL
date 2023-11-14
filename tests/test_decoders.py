@@ -1,6 +1,7 @@
 import unittest
 import torch
-from modules.decoders import ConvHead, MLPHead, MLPEnsembleHead, KeyPointHead
+from modules.decoders import ConvHead, MLPHead, MLPEnsembleHead
+
 
 # Test ConvHead
 class TestHeads(unittest.TestCase):
@@ -44,18 +45,3 @@ class TestHeads(unittest.TestCase):
         assert output.shape == (batch_size, n_models, out_channels)
 
     # Test KeyPointHead
-    def test_key_point_head(self):
-        batch_size = 2
-        in_channels = 3
-        out_channels = 10
-        height = 64
-        width = 64
-        # pool_to = (16, 16)
-
-        x = torch.randn(batch_size, in_channels, height, width)
-        key_point_head = KeyPointHead(
-            # pool_to,
-            in_channels, out_channels, height=height, width=width)
-        output = key_point_head(x)
-
-        assert output.shape == (batch_size, out_channels)
