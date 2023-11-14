@@ -12,7 +12,6 @@ def mIOU(y_pred, y_true):
     iou = torch.zeros(y_pred.shape[0], dtype=y_pred.dtype, device=y_pred.device)
     num_classes = y_pred.shape[1]
     y_pred = torch.argmax(y_pred, dim=1)
-    y_true = torch.argmax(y_true, dim=1)
     for i in range(num_classes):
         intersection = ((y_true == i) & (y_pred == i)).sum(axis=(1, 2))
         union = ((y_true == i) | (y_pred == i)).sum(axis=(1, 2))
