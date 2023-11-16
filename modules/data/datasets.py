@@ -310,7 +310,7 @@ class KeyPointDataset(BaseTaskDataset):
             keypoint_gaussians.append(keypoint_gaussian)
 
         keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
-        return {"image": image, "label": keypoint_gaussians_tensor
+        return {"image": image, "label": keypoint_gaussians_tensor, "name": image_path
                 # , "final_keypoints": keypoints}
                 }
 
