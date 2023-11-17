@@ -11,7 +11,7 @@ class ConvHead(nn.Module):
     """Convolutional head for downstream tasks"""
 
     def __init__(
-            self, in_channels, out_channels, hidden_channels=256, kernel_size=3, padding=1
+        self, in_channels, out_channels, hidden_channels=256, kernel_size=3, padding=1
     ):
         super().__init__()
         self.conv0 = nn.Conv2d(
@@ -30,7 +30,7 @@ class ConvHead(nn.Module):
 
 class PixelwiseMLPHead(torch.nn.Module):
     def __init__(
-            self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
+        self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
     ):
         super(PixelwiseMLPHead, self).__init__()
         self.fc1 = nn.Linear(in_channels, hidden_channels1)
@@ -56,7 +56,7 @@ class MLPHead(nn.Module):
     """MLP head for downstream tasks"""
 
     def __init__(
-            self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
+        self, in_channels, out_channels, hidden_channels1=256, hidden_channels2=128
     ):
         super().__init__()
         self.fc0 = nn.Linear(in_channels, hidden_channels1)
@@ -77,12 +77,12 @@ class MLPEnsembleHead(nn.Module):
     Should use majority voting for classification and averaging for regression."""
 
     def __init__(
-            self,
-            in_channels,
-            out_channels,
-            hidden_channels1=256,
-            hidden_channels2=128,
-            n_models=3,
+        self,
+        in_channels,
+        out_channels,
+        hidden_channels1=256,
+        hidden_channels2=128,
+        n_models=3,
     ):
         super().__init__()
         self.n_models = n_models

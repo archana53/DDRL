@@ -3,8 +3,8 @@ import torch
 from modules.decoders import ConvHead, MLPHead, MLPEnsembleHead
 
 
-# Test ConvHead
 class TestHeads(unittest.TestCase):
+    # Test ConvHead
     def test_conv_head(self):
         batch_size = 2
         in_channels = 3
@@ -39,9 +39,9 @@ class TestHeads(unittest.TestCase):
         n_models = 3
 
         x = torch.randn(batch_size, in_channels)
-        mlp_ensemble_head = MLPEnsembleHead(in_channels, out_channels, n_models=n_models)
+        mlp_ensemble_head = MLPEnsembleHead(
+            in_channels, out_channels, n_models=n_models
+        )
         output = mlp_ensemble_head(x)
 
         assert output.shape == (batch_size, n_models, out_channels)
-
-    # Test KeyPointHead

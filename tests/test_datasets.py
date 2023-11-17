@@ -16,7 +16,9 @@ BIWI_PATH = pathlib.Path("/coc/flash5/schermala3/Datasets/BIWIKinectHeads/prepro
 
 class TestCelebAHQMaskDataset(unittest.TestCase):
     def setUp(self):
-        self.dataset = CelebAHQMaskDataset(root=CELEBA_PATH, size=(256, 256), mode="train")
+        self.dataset = CelebAHQMaskDataset(
+            root=CELEBA_PATH, size=(256, 256), mode="train"
+        )
 
     def test_len(self):
         self.assertEqual(len(self.dataset), 30000)
@@ -56,22 +58,26 @@ class TestDepthDataset(unittest.TestCase):
 
 class TestALFWDataset(unittest.TestCase):
     def setUp(self):
-        self.dataset = KeyPointDataset(root=Path("resources/test_keypoint.GTB"), mode="train")
+        self.dataset = KeyPointDataset(
+            root=Path("resources/test_keypoint.GTB"), mode="train"
+        )
 
     def test_len(self):
         self.assertEqual(len(self.dataset), 4)
 
     def test_getitem(self):
         for data in self.dataset:
-            self.assertEqual(data['image'].size(), torch.Size((3, 256, 256)))
+            self.assertEqual(data["image"].size(), torch.Size((3, 256, 256)))
             # Not all images have all the keypoints, sometimes they are hidden
             # self.assertEqual(len(data['label']), 19)
-            self.assertEqual(len(data['label'][0]), 2)
+            self.assertEqual(len(data["label"][0]), 2)
 
 
 class TestDatasetType(unittest.TestCase):
     def test_CelebAHQMask(self):
-        dataset = DatasetType.CelebAHQMask.value(root=CELEBA_PATH, size=(256, 256), mode="train")
+        dataset = DatasetType.CelebAHQMask.value(
+            root=CELEBA_PATH, size=(256, 256), mode="train"
+        )
         self.assertIsInstance(dataset, CelebAHQMaskDataset)
 
     def test_Depth(self):
@@ -79,7 +85,9 @@ class TestDatasetType(unittest.TestCase):
         self.assertIsInstance(dataset, DepthDataset)
 
     def test_ALFW(self):
-        dataset = DatasetType.KeyPoint.value(root=Path("resources/test_keypoint.GTB"), mode="train")
+        dataset = DatasetType.KeyPoint.value(
+            root=Path("resources/test_keypoint.GTB"), mode="train"
+        )
         self.assertIsInstance(dataset, KeyPointDataset)
 
 

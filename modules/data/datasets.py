@@ -25,21 +25,20 @@ class BaseTaskDataset(Dataset):
         mode (str, optional): Mode of the dataset. Must be one of (train, val, test). Defaults to "train".
     """
 
-    def validate_root(self, root):
-        return not root.exists() or not root.is_dir()
-
     def __init__(
-            self,
-            root: pathlib.Path,
-            size: Tuple[int, int] = (256, 256),
-            mode: str = "train",
-            *args,
-            **kwargs,
+        self,
+        root: pathlib.Path,
+        size: Tuple[int, int] = (256, 256),
+        mode: str = "train",
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
         if mode not in ("train", "val", "test"):
-            raise ValueError(f"mode must be one of (train, val, test). Given mode: {mode}")
+            raise ValueError(
+                f"mode must be one of (train, val, test). Given mode: {mode}"
+            )
         if self.validate_root(root):
             raise FileNotFoundError(f"Root directory {root} is not valid.")
 
@@ -56,8 +55,10 @@ class BaseTaskDataset(Dataset):
                 ToTensorV2(transpose_mask=True),
             ],
             is_check_shapes=False,  # CelebAHQMaskDataset has a different shape for image and mask
-            keypoint_params=A.KeypointParams(format="xy")
         )
+
+    def validate_root(self, root):
+        return not root.exists() or not root.is_dir()
 
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -110,7 +111,9 @@ class CelebAHQMaskDataset(BaseTaskDataset):
         image = Image.open(image_path)
 
         label_path = self.labels[idx]
-        label = Image.open(image_path.parent.parent / self.label_subfolder / label_path).convert("P")
+        label = Image.open(
+            image_path.parent.parent / self.label_subfolder / label_path
+        ).convert("P")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(label))
@@ -173,7 +176,9 @@ class DepthDataset(BaseTaskDataset):
         image = Image.open(image_path)
 
         depth_path = self.depths[idx]
-        depth = Image.open(image_path.parent.parent / self.depth_subfolder / depth_path).convert("L")
+        depth = Image.open(
+            image_path.parent.parent / self.depth_subfolder / depth_path
+        ).convert("L")
 
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), mask=np.array(depth))
@@ -195,49 +200,11 @@ class KeyPointDataset(BaseTaskDataset):
     Returns a dict with keys "image" and "label" for the image and keypoint map respectively.
     """
 
-    def validate_root(self, root):
-        return not root.exists() or not root.is_file()
-
-    def parse_coordinate(self, coord):
-        return int(float(coord))
-
-    def get_bounding_box(self, ax, ay, bx, by):
-        return self.parse_coordinate(ax), self.parse_coordinate(ay), self.parse_coordinate(bx), self.parse_coordinate(
-            by)
-
-    def get_file_info(self, ground_truth_file):
-        with open(ground_truth_file) as file:
-            ground_truths = [line.rstrip() for line in file]
-
-        image_paths = []
-        pts_paths = []
-        bounding_boxes = []
-        for ground_truth in ground_truths:
-            split_line = ground_truth.split(' ')
-            image_paths.append(split_line[0])
-            pts_paths.append(split_line[1])
-            bounding_box = self.get_bounding_box(split_line[2], split_line[3], split_line[4], split_line[5])
-            bounding_boxes.append(bounding_box)
-
-        return image_paths, pts_paths, bounding_boxes
-
-    # def get_image_path(self, idx):
-    #     return self.file_info[idx][0]
-
-    def get_keypoints(self, pts_path):
-        with open(pts_path) as file:
-            lines = [line.rstrip() for line in file]
-
-        coords = []
-        for line in lines:
-            split_line = line.split(' ')
-            coords.append((float(split_line[1]), float(split_line[2])))
-
-        return coords
-
     def __init__(self, gaussian_sigma=5, *args, **kwargs):
         super(KeyPointDataset, self).__init__(*args, **kwargs)
-        self.image_paths, self.pts_paths, self.bounding_boxes = self.get_file_info(self.root)
+        self.image_paths, self.pts_paths, self.bounding_boxes = self.get_file_info(
+            self.root
+        )
         self.transforms = A.Compose(
             [
                 # geometric
@@ -259,17 +226,63 @@ class KeyPointDataset(BaseTaskDataset):
             ],
         )
 
-    """
-        keypoints follow a origin in the top left structure, whereas the gaussian map algorithm
-        assumes origin in the center formulation, in a [-1, 1] range  so this shifts all keypoints to the new origin
-        and scales it to -1, 1
-    """
+    def validate_root(self, root):
+        return not root.exists() or not root.is_file()
+
+    def parse_coordinate(self, coord):
+        return int(float(coord))
+
+    def get_bounding_box(self, ax, ay, bx, by):
+        return (
+            self.parse_coordinate(ax),
+            self.parse_coordinate(ay),
+            self.parse_coordinate(bx),
+            self.parse_coordinate(by),
+        )
+
+    def get_file_info(self, ground_truth_file):
+        with open(ground_truth_file) as file:
+            ground_truths = [line.rstrip() for line in file]
+
+        image_paths = []
+        pts_paths = []
+        bounding_boxes = []
+        for ground_truth in ground_truths:
+            split_line = ground_truth.split(" ")
+            image_paths.append(split_line[0])
+            pts_paths.append(split_line[1])
+            bounding_box = self.get_bounding_box(
+                split_line[2], split_line[3], split_line[4], split_line[5]
+            )
+            bounding_boxes.append(bounding_box)
+
+        return image_paths, pts_paths, bounding_boxes
+
+    def get_keypoints(self, pts_path):
+        with open(pts_path) as file:
+            lines = [line.rstrip() for line in file]
+
+        coords = []
+        for line in lines:
+            split_line = line.split(" ")
+            coords.append((float(split_line[1]), float(split_line[2])))
+
+        return coords
 
     def get_shifted_coords(self, image, coords):
+        """keypoints follow a origin in the top left structure, whereas the gaussian map algorithm
+        assumes origin in the center formulation, in a [-1, 1] range  so this shifts all keypoints to the new origin
+        and scales it to -1, 1
+        """
         shift_amount_0 = image.size()[1]
         shift_amount_1 = image.size()[2]
-        return [((2 * x[0] - shift_amount_0) / shift_amount_0, (2 * x[1] - shift_amount_1) / shift_amount_1) for x in
-                coords]
+        return [
+            (
+                (2 * x[0] - shift_amount_0) / shift_amount_0,
+                (2 * x[1] - shift_amount_1) / shift_amount_1,
+            )
+            for x in coords
+        ]
 
     def __getitem__(self, idx):
         # TODO: test this
@@ -281,14 +294,18 @@ class KeyPointDataset(BaseTaskDataset):
 
         bounding_box_crop = A.Compose(
             [
-                A.Crop(x_min=self.bounding_boxes[idx][0],
-                       y_min=self.bounding_boxes[idx][1],
-                       x_max=self.bounding_boxes[idx][2],
-                       y_max=self.bounding_boxes[idx][3])
+                A.Crop(
+                    x_min=self.bounding_boxes[idx][0],
+                    y_min=self.bounding_boxes[idx][1],
+                    x_max=self.bounding_boxes[idx][2],
+                    y_max=self.bounding_boxes[idx][3],
+                )
             ],
-            keypoint_params=A.KeypointParams(format="xy")
+            keypoint_params=A.KeypointParams(format="xy"),
         )
-        box_crop_transformed = bounding_box_crop(image=np.array(image), keypoints=keypoints)
+        box_crop_transformed = bounding_box_crop(
+            image=np.array(image), keypoints=keypoints
+        )
         image = box_crop_transformed["image"]
         keypoints = box_crop_transformed["keypoints"]
 
@@ -304,15 +321,23 @@ class KeyPointDataset(BaseTaskDataset):
         shifted_keypoints = self.get_shifted_coords(image, keypoints)
         keypoint_gaussians = []
         for keypoint in shifted_keypoints:
-            keypoint_gaussian = generate_gaussian_heatmap(torch.zeros(image.size()[1], image.size()[2]), keypoint[0],
-                                                          keypoint[1], self.gaussian_sigma)
-            keypoint_gaussian = self.keypoints_to_tensor(image=np.array(keypoint_gaussian))["image"]
+            keypoint_gaussian = generate_gaussian_heatmap(
+                torch.zeros(image.size()[1], image.size()[2]),
+                keypoint[0],
+                keypoint[1],
+                self.gaussian_sigma,
+            )
+            keypoint_gaussian = self.keypoints_to_tensor(
+                image=np.array(keypoint_gaussian)
+            )["image"]
             keypoint_gaussians.append(keypoint_gaussian)
 
         keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
-        return {"image": image, "label": keypoint_gaussians_tensor, "name": image_path
-                # , "final_keypoints": keypoints}
-                }
+        return {
+            "image": image,
+            "label": keypoint_gaussians_tensor,
+            "name": image_path
+        }
 
     def __len__(self):
         return len(self.image_paths)
