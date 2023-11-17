@@ -2,16 +2,8 @@
 
 ## Standard libraries
 import os
-import io
 from copy import deepcopy
 
-## Imports for plotting
-import matplotlib.pyplot as plt
-plt.set_cmap('cividis')
-import matplotlib
-matplotlib.rcParams['lines.linewidth'] = 2.0
-import seaborn as sns
-sns.set()
 
 ## tqdm for loading bars
 from tqdm.notebook import tqdm
@@ -25,21 +17,19 @@ import torch.optim as optim
 
 ## Torchvision
 import torchvision
-from torchvision.datasets import STL10,CIFAR10
 from torchvision import transforms
 
 # PyTorch Lightning
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
-from unet_extractor import ModelExtractor
+from ldms import UnconditionalDiffusionModelConfig, UnconditionalDiffusionModel
 from functools import partial
 from PIL import Image
 from diffusers import LDMPipeline
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 import numpy as np
-import random
 
 
 
@@ -50,6 +40,12 @@ CHECKPOINT_PATH = "../saved_models/"
 # In this notebook, we use data loaders with heavier computational processing. It is recommended to use as many
 # workers as possible in a data loader, which corresponds to the number of CPU cores
 NUM_WORKERS = os.cpu_count()
+
+# Setting the seed
+pl.seed_everything(42)
+
+os.makedirs(CHECKPOINT_PATH, exist_ok=True)
+
 
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
@@ -63,7 +59,7 @@ print("Number of workers:", NUM_WORKERS)
 
 class ContrastiveLearning(pl.LightningModule):
     
-    def __init__(self, in_channels, out_channels, lr, temperature, weight_decay, max_epochs=500, hidden_channels1=256, hidden_channels2=128):
+    def __init__(self, in_channels, out_channels, lr, temperature, weight_decay,timestep,scales,scale_direction, max_epochs=500, hidden_channels1=256, hidden_channels2=128):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -73,7 +69,16 @@ class ContrastiveLearning(pl.LightningModule):
         self.max_epochs = max_epochs
         self.hidden_channels1 = hidden_channels1
         self.hidden_channels2 = hidden_channels2
+        self.timestep = timestep
+        self.scales = scales
+        self.scale_direction = scale_direction
+
         assert self.temperature > 0.0, 'The temperature must be a positive float!'
+
+        self.model_config = UnconditionalDiffusionModelConfig()
+        self.model = UnconditionalDiffusionModel(self.model_config)
+        self.model.set_feature_scales_and_direction(self.scales,self.scale_direction)
+        self.lora_layers = self.model.add_lora_compatibility(4)
         self.fc0 = nn.Linear(self.in_channels, self.hidden_channels1)
         self.bn0 = nn.BatchNorm1d(self.hidden_channels1)
         self.fc1 = nn.Linear(self.hidden_channels1, self.hidden_channels2)
@@ -81,6 +86,8 @@ class ContrastiveLearning(pl.LightningModule):
         self.fc = nn.Linear(self.hidden_channels2, self.out_channels)
 
     def forward(self, x):
+        noisy_pred, x  = self.model.get_features(x,self.timestep)
+        x = torch.flatten(x, start_dim=1)
         x = F.relu(self.bn0(self.fc0(x)))
         x = F.relu(self.bn1(self.fc1(x)))
         x = self.fc(x)
@@ -98,9 +105,6 @@ class ContrastiveLearning(pl.LightningModule):
     def info_nce_loss(self, batch, mode='train'):
         imgs, _ = batch
         imgs = torch.cat(imgs, dim=0)
-        imgs = torch.flatten(imgs, start_dim=1, end_dim=3)
-        imgs = imgs[:,:16]
-        print(imgs.shape)
 
 
         # Encode all images
@@ -116,6 +120,8 @@ class ContrastiveLearning(pl.LightningModule):
         cos_sim = cos_sim / self.temperature
         nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
         nll = nll.mean()
+        print("###############################################################################################")
+        print(nll)
 
         # Logging loss
         self.log(mode+'_loss', nll)
@@ -159,12 +165,11 @@ class ContrastiveTransformations(object):
         return [self.base_transforms(x) for i in range(self.n_views)]
 
 def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kwargs):
-    trainer = pl.Trainer(default_root_dir=os.path.join(CHECKPOINT_PATH, 'ContrastiveLearning'),
+    trainer = pl.Trainer(
                          accelerator="gpu" if str(device).startswith("cuda") else "cpu",
                          devices=1,
-                         max_epochs=max_epochs,
-                         callbacks=[ModelCheckpoint(save_weights_only=True, mode='max', monitor='val_acc_top5'),
-                                    LearningRateMonitor('epoch')])
+                         max_epochs=max_epochs
+                        )
     trainer.logger._default_hp_metric = None # Optional logging argument that we don't need
 
     # Check whether pretrained model exists. If yes, load it and skip training
@@ -180,7 +185,13 @@ def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kw
         pl.seed_everything(42) # To be reproducable
         model = ContrastiveLearning(max_epochs=max_epochs, **kwargs)
         trainer.fit(model, train_loader, val_loader)
-        model = ContrastiveLearning.load_from_checkpoint(trainer.checkpoint_callback.best_model_path) # Load best checkpoint after training
+        #trainer.save_checkpoint(pretrained_filename)
+        #model = model = ContrastiveLearning.load_from_checkpoint(pretrained_filename)#ContrastiveLearning.load_from_checkpoint(trainer.checkpoint_callback.best_model_path) # Load best checkpoint after training
+    # cl_model = ContrastiveLearning(max_epochs=max_epochs, **kwargs)
+    # train_loader = data.DataLoader(unlabeled_data, batch_size=batch_size, shuffle=True,drop_last=True, pin_memory=True, num_workers=NUM_WORKERS)
+    # trainer = pl.Trainer()
+    # trainer.fit(model=cl_model, train_dataloaders=train_loader)
+
 
     return model   
 
@@ -215,71 +226,21 @@ class CelebAHQDataset(Dataset):
 
 
 if __name__ == '__main__':
-    # unlabeled_data = CIFAR10(root=DATASET_PATH, train=True, download=True,
-    #                    transform=ContrastiveTransformations(n_views=2))
-    # print(unlabeled_data)
-    # train_data_contrast = CIFAR10(root=DATASET_PATH, train=False, download=True,
-    #                             transform=ContrastiveTransformations(n_views=2))
-    
-    # print(unlabeled_data)
-    # celeb_data = CelebAHQDataset(root_dir="/Users/omscs/Desktop/MLLS/DDRL/data/celeba_hq_256",transform=ContrastiveTransformations(n_views=2))
-    # print(celeb_data)
-
-    # pl.seed_everything(42)
-    # NUM_IMAGES = 6
-    # imgs = torch.stack([img for idx in range(NUM_IMAGES) for img in celeb_data[idx][0]], dim=0)
-    # img_grid = torchvision.utils.make_grid(imgs, nrow=6, normalize=True, pad_value=0.9)
-    # img_grid = img_grid.permute(1, 2, 0)
-
-    # plt.figure(figsize=(10,5))
-    # plt.title('Augmented image examples of celebahq')
-    # plt.imshow(img_grid)
-    # plt.axis('off')
-    # plt.show()
-    # plt.close()
-    # clr_model = train_cl(batch_size=2,
-    #                     unlabeled_data = unlabeled_data,
-    #                     train_data_contrast = train_data_contrast,
-    #                     in_channels=16,
-    #                     out_channels = 16,
-    #                     lr=5e-4,
-    #                     temperature=0.07,
-    #                     weight_decay=1e-4,
-    #                     max_epochs=500,
-    #                     hidden_channels1=16,
-    #                     hidden_channels2=16)
-    pipe = LDMPipeline.from_pretrained("CompVis/ldm-celebahq-256")
-    unet = pipe.unet
-
-    # Fix input size
-    resolution = (256, 256)
-    resize = transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR)
-    tensor = transforms.ToTensor()
-
-    # Load image
-    image = Image.open("/Users/omscs/Desktop/MLLS/DDRL/sample.jpg").convert("RGB")
-    image = resize(image)
-    image = tensor(image)
-    image = image.unsqueeze(0)
-    image = torch.cat([image, image], dim=0)
-
-    # Extract features
-    scales = [2, 3]
-    scale_direction = ["mid"]
-    timestep = random.randint(100,300)
-
-    # Create model extractor
-    model = ModelExtractor(pipe, unet, scale_direction, scales, latent=True, upsample=False)
-
-    # Extract features
-    # Time step is a single timestep for each image in the batch if
-    # there are multiple images i.e batch_size > 1 then the same timestep
-    # is used for all images in the batch. Multiple timesteps for each image
-    # is created only when a single image is passed in the batch i.e batch_size = 1
-    # To simulate multiple timesteps for each image in the batch, call this function
-    # multiple times with different timesteps or batch same input multiple times with
-    # different timesteps.
-    timesteps = torch.arange(1, timestep + 1) if image.shape[0] == 1 else torch.LongTensor([timestep])
-    timesteps = timesteps.to(image.device)
-    _, features = model(image, timesteps)
-    print(features.shape)
+    celeb_data = CelebAHQDataset(root_dir="/Users/omscs/Desktop/celebhq",transform=ContrastiveTransformations(n_views=2))
+    timestep = 100
+    scales = [1,2,3]
+    scale_direction = ["up","down"]
+    clr_model = train_cl(batch_size=24,
+                        unlabeled_data = celeb_data,
+                        train_data_contrast = celeb_data,
+                        in_channels=3360,
+                        out_channels = 16,
+                        lr=5e-4,
+                        temperature=0.07,
+                        weight_decay=1e-4,
+                        max_epochs=500,
+                        hidden_channels1=1024,
+                        hidden_channels2=256,
+                        timestep = torch.LongTensor([timestep]),
+                        scales = scales,
+                        scale_direction = scale_direction)
