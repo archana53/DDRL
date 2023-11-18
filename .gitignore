@@ -1,5 +1,17 @@
 modules/data/aflw_dataset
+
+# IDE files
 .idea/
+.vscode
+
+# Python
 __pycache__/
 .ipynb_checkpoints/
+
+# checkpoints
+checkpoints/
+
+# logs
 logs/
+*.log
+*log*

@@ -1,15 +1,15 @@
 # Modified from repo - https://github.com/nicehuster/cpm-facial-landmarks
 #
-import sys
-import os, math
+import math
 import os.path as osp
-import numpy as np
-
-from scipy.io import loadmat
-from utils import PTSconvert2box, PTSconvert2str
 from argparse import ArgumentParser
 from pathlib import Path
+
+import numpy as np
 from PIL import Image
+from scipy.io import loadmat
+
+from utils import PTSconvert2box, PTSconvert2str
 
 
 class AFLWFace:
@@ -69,9 +69,11 @@ class AFLWFace:
         image = Image.open(image_directory_path / self.image_path)
         w, h = image.size
 
-        return (self.check_bounding_box_within_range(w, h)
-                and self.check_keypoint_within_range(w, h)
-                and self.check_front())
+        return (
+            self.check_bounding_box_within_range(w, h)
+            and self.check_keypoint_within_range(w, h)
+            and self.check_front()
+        )
         pass
 
     def check_in_bounds(self, x, y, w, h):
@@ -79,7 +81,10 @@ class AFLWFace:
 
     def check_bounding_box_within_range(self, w, h):
         box = self.face_box
-        return self.check_in_bounds(box[0], box[1], w, h) and self.check_in_bounds(box[2], box[3], w, h)
+        return (
+            self.check_in_bounds(box[0], box[1], w, h) and 
+            self.check_in_bounds(box[2], box[3], w, h)
+        )
 
     def check_keypoint_within_range(self, w, h):
         for idx in range(self.landmarks.shape[0]):
@@ -136,14 +141,14 @@ def filter_images_with_checks(allfaces, use_checks, image_directory_path):
 
 
 def save_to_list_file(
-        root_dir,
-        allfaces,
-        lst_file,
-        image_style_dir,
-        annotation_dir,
-        use_checks,
-        use_box,
-        use_single_face_images=True,
+    root_dir,
+    allfaces,
+    lst_file,
+    image_style_dir,
+    annotation_dir,
+    use_checks,
+    use_box,
+    use_single_face_images=True,
 ):
     # Filtering whether only front faces are to be used
     save_faces = []
@@ -197,10 +202,10 @@ def save_to_list_file(
 if __name__ == "__main__":
     parser = ArgumentParser(
         description="Aflw data processor. Expected directory structure: "
-                    "modules/data/aflw_dataset/images/0/*.jpg, "
-                    "modules/data/aflw_dataset/images/2/*.jpg, "
-                    "modules/data/aflw_dataset/images/3/*.jpg, "
-                    "modules/data/aflw_dataset/ALFWinfo_release.mat"
+        "modules/data/aflw_dataset/images/0/*.jpg, "
+        "modules/data/aflw_dataset/images/2/*.jpg, "
+        "modules/data/aflw_dataset/images/3/*.jpg, "
+        "modules/data/aflw_dataset/ALFWinfo_release.mat"
     )
     parser.add_argument(
         "--root_dir",

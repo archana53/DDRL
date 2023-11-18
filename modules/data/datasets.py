@@ -24,12 +24,12 @@ class BaseTaskDataset(Dataset):
     """
 
     def __init__(
-            self,
-            root: pathlib.Path,
-            size: Tuple[int, int] = (256, 256),
-            mode: str = "train",
-            *args,
-            **kwargs,
+        self,
+        root: pathlib.Path,
+        size: Tuple[int, int] = (256, 256),
+        mode: str = "train",
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
@@ -95,7 +95,9 @@ class CelebAHQMaskDataset(BaseTaskDataset):
                 # geometric
                 A.Flip(),
                 A.Rotate(limit=30),
-                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
+                A.Resize(
+                    512, 512
+                ),  # resize both image and mask to 512x512 before cropping
                 A.RandomResizedCrop(*self.size),
                 # color
                 A.ColorJitter(),
@@ -206,9 +208,12 @@ class KeyPointDataset(BaseTaskDataset):
         self.transforms = A.Compose(
             [
                 # geometric
+                # TODO: enable these after bug fix
                 # A.Flip(always_apply=True),
                 # A.Rotate(limit=30),
-                A.Resize(512, 512),  # resize both image and mask to 512x512 before cropping
+                A.Resize(
+                    512, 512
+                ),  # resize both image and mask to 512x512 before cropping
                 # No random crops to avoid missing out on keypoints
                 # color
                 A.ColorJitter(),
@@ -298,7 +303,7 @@ class KeyPointDataset(BaseTaskDataset):
         image_path = self.image_paths[idx]
         keypoint_path = self.pts_paths[idx]
 
-        image = Image.open(image_path).convert('RGB')
+        image = Image.open(image_path).convert("RGB")
         keypoints = self.get_keypoints(keypoint_path)
 
         bounding_box_crop = A.Compose(
@@ -318,22 +323,15 @@ class KeyPointDataset(BaseTaskDataset):
         image = box_crop_transformed["image"]
         keypoints = box_crop_transformed["keypoints"]
 
-        # if not len(keypoints) == 19:
-        #     print("problem")
-
         if self.mode == "train":
             transformed = self.transforms(image=np.array(image), keypoints=keypoints)
             image = transformed["image"]
             keypoints = transformed["keypoints"]
-            # if not len(keypoints) == 19:
-            #     print("problem")
 
         transformed = self.to_tensor(image=np.array(image), keypoints=keypoints)
         image = transformed["image"]
         keypoints = transformed["keypoints"]
 
-        # if not len(keypoints) == 19:
-        #     print("problem")
         shifted_keypoints = self.get_shifted_coords(image, keypoints)
         keypoint_gaussians = []
         for keypoint in shifted_keypoints:
@@ -350,16 +348,7 @@ class KeyPointDataset(BaseTaskDataset):
 
         keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
 
-        # if not keypoint_gaussians_tensor.size() == torch.Size([19, 256, 256]):
-        #     print("problem")
-        #
-        # if not image.size() == torch.Size([3, 256, 256]):
-        #     print("problem")
-        return {
-            "image": image,
-            "label": keypoint_gaussians_tensor,
-            "name": image_path
-        }
+        return {"image": image, "label": keypoint_gaussians_tensor, "name": image_path}
 
     def __len__(self):
         return len(self.image_paths)
