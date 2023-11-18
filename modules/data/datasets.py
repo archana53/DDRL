@@ -1,18 +1,16 @@
 import pathlib
-import json
-from typing import Tuple
 from enum import Enum
+from typing import Tuple
 
-import torch
 import albumentations as A
 import numpy as np
-import torchvision.transforms
+import torch
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
 from torch.utils.data import Dataset
-from enum import Enum
-from modules.feature_loader import FeatureLoader
+
 from modules.data.utils import generate_gaussian_heatmap
+from modules.feature_loader import FeatureLoader
 
 
 class BaseTaskDataset(Dataset):
@@ -219,6 +217,17 @@ class KeyPointDataset(BaseTaskDataset):
             keypoint_params=A.KeypointParams(format="xy"),
         )
         self.gaussian_sigma = gaussian_sigma
+
+        self.to_tensor = A.Compose(
+            [
+                A.Resize(*self.size),
+                A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                ToTensorV2(transpose_mask=True),
+            ],
+            is_check_shapes=False,  # CelebAHQMaskDataset has a different shape for image and mask
+            keypoint_params=A.KeypointParams(format="xy"),
+        )
+
         self.keypoints_to_tensor = A.Compose(
             [
                 A.Resize(*self.size),
