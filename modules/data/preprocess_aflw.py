@@ -9,6 +9,7 @@ from scipy.io import loadmat
 from utils import PTSconvert2box, PTSconvert2str
 from argparse import ArgumentParser
 from pathlib import Path
+from PIL import Image
 
 
 class AFLWFace:
@@ -64,6 +65,28 @@ class AFLWFace:
         box_str = "{:.2f} {:.2f} {:.2f} {:.2f}".format(box[0], box[1], box[2], box[3])
         return box_str, face_size
 
+    def check(self, image_directory_path):
+        image = Image.open(image_directory_path / self.image_path)
+        w, h = image.size
+
+        return (self.check_bounding_box_within_range(w, h)
+                and self.check_keypoint_within_range(w, h)
+                and self.check_front())
+        pass
+
+    def check_in_bounds(self, x, y, w, h):
+        return x >= 0 and y >= 0 and x < w and y < h
+
+    def check_bounding_box_within_range(self, w, h):
+        box = self.face_box
+        return self.check_in_bounds(box[0], box[1], w, h) and self.check_in_bounds(box[2], box[3], w, h)
+
+    def check_keypoint_within_range(self, w, h):
+        for idx in range(self.landmarks.shape[0]):
+            if bool(self.landmarks[idx, 2]):
+                x, y = self.landmarks[idx, 0], self.landmarks[idx, 1]
+                return self.check_in_bounds(x, y, w, h)
+
     def check_front(self):
         """If all the landmarks are within the bounding box, face is facing front"""
         oks = 0
@@ -104,23 +127,23 @@ def filter_images_with_single_face(faces):
     return save_faces
 
 
-def filter_images_with_front_face(allfaces, use_front):
+def filter_images_with_checks(allfaces, use_checks, image_directory_path):
     save_faces = []
     for face in allfaces:
-        if use_front == False or face.check_front():
+        if use_checks == False or face.check(image_directory_path):
             save_faces.append(face)
     return save_faces
 
 
 def save_to_list_file(
-    root_dir,
-    allfaces,
-    lst_file,
-    image_style_dir,
-    annotation_dir,
-    use_front,
-    use_box,
-    use_single_face_images=True,
+        root_dir,
+        allfaces,
+        lst_file,
+        image_style_dir,
+        annotation_dir,
+        use_checks,
+        use_box,
+        use_single_face_images=True,
 ):
     # Filtering whether only front faces are to be used
     save_faces = []
@@ -128,7 +151,8 @@ def save_to_list_file(
     if use_single_face_images is True:
         save_faces = filter_images_with_single_face(allfaces)
 
-    save_faces = filter_images_with_front_face(save_faces, use_front)
+    image_directory_path = root_dir / image_style_dir
+    save_faces = filter_images_with_checks(save_faces, use_checks, image_directory_path)
 
     print("Prepare to save {} face images into {}".format(len(save_faces), lst_file))
 
@@ -142,7 +166,7 @@ def save_to_list_file(
             pts_file_name = base_name.split(".")[0] + "-{}.pts".format(face.face_id)
             annot_path = root_dir / annot_dir / pts_file_name
             annot_dir.mkdir(exist_ok=True, parents=True)
-            image_path = root_dir / image_style_dir / image_path
+            image_path = image_directory_path / image_path
             assert image_path.is_file(), "The image [{}/{}] {} does not exist".format(
                 index, len(save_faces), image_path
             )
@@ -173,10 +197,10 @@ def save_to_list_file(
 if __name__ == "__main__":
     parser = ArgumentParser(
         description="Aflw data processor. Expected directory structure: "
-        "modules/data/aflw_dataset/images/0/*.jpg, "
-        "modules/data/aflw_dataset/images/2/*.jpg, "
-        "modules/data/aflw_dataset/images/3/*.jpg, "
-        "modules/data/aflw_dataset/ALFWinfo_release.mat"
+                    "modules/data/aflw_dataset/images/0/*.jpg, "
+                    "modules/data/aflw_dataset/images/2/*.jpg, "
+                    "modules/data/aflw_dataset/images/3/*.jpg, "
+                    "modules/data/aflw_dataset/ALFWinfo_release.mat"
     )
     parser.add_argument(
         "--root_dir",
