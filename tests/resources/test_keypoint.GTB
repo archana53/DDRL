@@ -1,0 +1,4 @@
+resources/test_keypoint_images/3/image00035.jpg resources/test_keypoint_pts/processed/annotations/3/image00035-0.pts 62.00 64.00 410.00 412.00 348.0
+resources/test_keypoint_images/3/image00032.jpg resources/test_keypoint_pts/processed/annotations/3/image00032-1.pts 110.00 25.00 198.00 113.00 88.0
+resources/test_keypoint_images/3/image00168.jpg resources/test_keypoint_pts/processed/annotations/3/image00168-2.pts 63.00 128.00 325.00 390.00 262.0
+resources/test_keypoint_images/3/image00179.jpg resources/test_keypoint_pts/processed/annotations/3/image00179-3.pts 181.00 341.00 457.00 617.00 276.0
