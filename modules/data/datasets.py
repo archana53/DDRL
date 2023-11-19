@@ -348,7 +348,8 @@ class KeyPointDataset(BaseTaskDataset):
 
         keypoint_gaussians_tensor = torch.vstack(keypoint_gaussians)
 
-        return {"image": image, "label": keypoint_gaussians_tensor, "name": image_path}
+        image_name = pathlib.Path(image_path).name
+        return {"image": image, "label": keypoint_gaussians_tensor, "name": image_name}
 
     def __len__(self):
         return len(self.image_paths)
