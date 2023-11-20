@@ -1,5 +1,8 @@
 import torch
 
+from utils import heatmap_to_keypoints
+
+
 def mIOU(y_pred, y_true):
     """
     Computes the mean Intersection over Union (mIOU) metric for semantic segmentation.
@@ -19,6 +22,7 @@ def mIOU(y_pred, y_true):
     iou /= num_classes
     return torch.mean(iou)
 
+
 def MSE(y_pred, y_true):
     """
     Computes the mean squared error (MSE) metric for depth estimation.
@@ -28,4 +32,19 @@ def MSE(y_pred, y_true):
     Returns:
         float: Mean squared error (MSE) score.
     """
+    return torch.mean((y_true - y_pred) ** 2)
+
+
+def keypoint_MSE(y_pred, y_true):
+    """
+    Computes the mean squared error (MSE) metric for keypoint estimation.
+    Extracts keypoints from the heatmap and computes the MSE on coordinates.
+    Args:
+        y_pred (torch.Tensor): Predicted keypoint of shape (batch_size, 2).
+        y_true (torch.Tensor): Ground truth keypoint of shape (batch_size, 2).
+    Returns:
+        float: Mean squared error (MSE) score.
+    """
+    y_pred = heatmap_to_keypoints(y_pred)
+    y_true = heatmap_to_keypoints(y_true)
     return torch.mean((y_true - y_pred) ** 2)

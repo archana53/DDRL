@@ -57,7 +57,8 @@ class PLModelTrainer(pl.LightningModule):
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
         self.log("train_loss", loss)
-        self.log("metrics", self.metrics(y_hat, y))
+        for key, metric in self.metrics.items():
+            self.log(key, metric(y_hat, y))
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -66,5 +67,16 @@ class PLModelTrainer(pl.LightningModule):
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
         self.log("val_loss", loss)
-        self.log("metrics", self.metrics(y_hat, y))
+        for key, metric in self.metrics.items():
+            self.log(key, metric(y_hat, y))
+        return {"loss": loss}
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch["image"], batch["label"]
+        features = batch.get("features", None)
+        y_hat = self.forward(x, features=features)
+        loss = self.criterion(y_hat, y)
+        self.log("test_loss", loss)
+        for key, metric in self.metrics.items():
+            self.log(key, metric(y_hat, y))
         return {"loss": loss}

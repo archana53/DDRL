@@ -8,17 +8,14 @@ import torch
 import torch.utils.data as data
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from modules.data.datasets import (
-    CelebAHQMaskDataset,
-    DatasetWithFeatures,
-    DepthDataset,
-    KeyPointDataset,
-)
+from metrics import MSE, keypoint_MSE, mIOU
+from modules.data.datasets import (CelebAHQMaskDataset, DatasetWithFeatures,
+                                   DepthDataset, KeyPointDataset)
 from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
-from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
+from modules.ldms import (UnconditionalDiffusionModel,
+                          UnconditionalDiffusionModelConfig)
 from modules.trainer import PLModelTrainer
-from modules.metrics import mIOU, MSE
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -26,14 +23,16 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 1,
-        "metrics": MSE,
+        "metrics": {
+            "mse": MSE,
+        },
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 19,
-        "metrics": MSE
+        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE},
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
@@ -274,9 +273,7 @@ if __name__ == "__main__":
     in_features = feature_size[1]
     out_features = task_config["out_channels"]
 
-    task_head = task_config["head"](
-        in_channels=in_features, out_channels=out_features
-    )
+    task_head = task_config["head"](in_channels=in_features, out_channels=out_features)
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
@@ -319,4 +316,12 @@ if __name__ == "__main__":
         model_trainer,
         train_dataloaders=task_train_dataloader,
         val_dataloaders=task_val_dataloader,
+    )
+
+    # Test the model
+    trainer.test(
+        model_trainer,
+        dataloaders=task_test_dataloader,
+        ckpt_path=checkpoint_callback.best_model_path,
+        verbose=True,
     )

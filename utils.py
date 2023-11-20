@@ -6,7 +6,9 @@ import numpy as np
 import torch
 
 
-def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
+def get_majority_vote(
+    predictions: torch.Tensor, threshold: float = 0.5
+) -> torch.Tensor:
     """
     Performs majority voting on a list of predictions.
 
@@ -19,7 +21,11 @@ def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torc
     """
 
     # Convert predictions to binary values based on threshold
-    binary_predictions = torch.where(predictions >= threshold, torch.ones_like(predictions), torch.zeros_like(predictions))
+    binary_predictions = torch.where(
+        predictions >= threshold,
+        torch.ones_like(predictions),
+        torch.zeros_like(predictions),
+    )
 
     # Sum the binary predictions across models
     summed_predictions = binary_predictions.sum(dim=1)
@@ -30,7 +36,9 @@ def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torc
     return majority_vote
 
 
-def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], color: str = 'red') -> np.ndarray:
+def visualize_keypoints(
+    image: torch.Tensor, keypoints: List[torch.Tensor], color: str = "red"
+) -> np.ndarray:
     """
     Visualizes keypoints on an image.
 
@@ -42,7 +50,7 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
     Returns:
         torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with keypoints.
     """
-    #TODO: check channels order
+    # TODO: check channels order
 
     # Convert image to numpy array
     image = image.cpu().numpy()
@@ -52,7 +60,6 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
 
     # Iterate over images
     for i in range(image.shape[0]):
-
         # Iterate over keypoints
         for keypoint in keypoints:
             # Get x and y coordinates
@@ -63,6 +70,31 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
             cv2.circle(image[i], (x, y), 5, color, -1)
 
     return image
+
+
+def heatmap_to_keypoints(heatmap: torch.Tensor) -> torch.Tensor:
+    """
+    Converts a heatmap to a list of keypoints.
+
+    Args:
+        heatmap (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the heatmap.
+
+    Returns:
+        torch.Tensor: A tensors of shape (batch_size, 2) representing the keypoints.
+    """
+
+    # Convert heatmap to numpy array
+    heatmap = heatmap.cpu().numpy()
+
+    # Get the x and y coordinates of the keypoints
+    # argmax_indices = np.argmax(heatmap, axis=(2, 3))
+    argmax_indices = heatmap.reshape(heatmap.shape[0], heatmap.shape[1], -1).argmax(-1)
+    keypoints = np.column_stack(np.unravel_index(argmax_indices, heatmap.shape[2:]))
+
+    # Convert keypoints to tensor
+    keypoints = torch.tensor(keypoints, dtype=torch.float32)
+
+    return keypoints
 
 
 def visualize_depth(image: torch.Tensor, depth: torch.Tensor) -> np.ndarray:
@@ -82,14 +114,17 @@ def visualize_depth(image: torch.Tensor, depth: torch.Tensor) -> np.ndarray:
 
     # Convert depth to numpy array
     depth = depth.cpu().numpy()
-    depth = (depth - np.min(depth, axis=(2,3), keepdims=True)) / (
-        np.max(depth, axis=(2,3), keepdims=True) - np.min(depth, axis=(2,3), keepdims=True)
-        )
+    depth = (depth - np.min(depth, axis=(2, 3), keepdims=True)) / (
+        np.max(depth, axis=(2, 3), keepdims=True)
+        - np.min(depth, axis=(2, 3), keepdims=True)
+    )
 
     return depth
 
 
-def visualize_segmentation(image: torch.Tensor, segmentation: torch.Tensor) -> np.ndarray:
+def visualize_segmentation(
+    image: torch.Tensor, segmentation: torch.Tensor
+) -> np.ndarray:
     """
     Visualizes segmentation on an image.
 
@@ -109,7 +144,7 @@ def visualize_segmentation(image: torch.Tensor, segmentation: torch.Tensor) -> n
     segmentation = np.argmax(segmentation, axis=1)
 
     # map segmentation to colors
-    cmap = plt.get_cmap('tab20')
+    cmap = plt.get_cmap("tab20")
     segmentation = cmap(segmentation)[:, :, :3]
 
     return segmentation
