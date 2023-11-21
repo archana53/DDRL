@@ -30,9 +30,10 @@ TASK_CONFIG = {
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
-        "head": None,
-        "criterion": None,
-        "metrics": lambda y_pred, y_true : 0,
+        "head": PixelwiseMLPHead,
+        "criterion": torch.nn.MSELoss,
+        "out_channels": 19,
+        "metrics": MSE
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
@@ -275,7 +276,7 @@ if __name__ == "__main__":
 
     task_head = task_config["head"](
         in_channels=in_features, out_channels=out_features
-    ) 
+    )
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
