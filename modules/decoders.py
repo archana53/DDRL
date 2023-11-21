@@ -11,7 +11,7 @@ class ConvHead(nn.Module):
     """Convolutional head for downstream tasks"""
 
     def __init__(
-        self, in_channels, hidden_channels, out_channels, kernel_size=3, padding=1
+        self, in_channels, out_channels, hidden_channels=256, kernel_size=3, padding=1
     ):
         super().__init__()
         self.conv0 = nn.Conv2d(
