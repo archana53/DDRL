@@ -19,7 +19,7 @@ from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
-from utils import visualize_heatmap
+from utils import visualize_heatmap, visualize_depth, visualize_segmentation
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -27,9 +27,8 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 1,
-        "metrics": {
-            "mse": MSE,
-        },
+        "metrics": {"mse": MSE},
+        "visualizer": visualize_depth,
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
@@ -44,7 +43,8 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.CrossEntropyLoss,
         "out_channels": 19,  # 19 classes
-        "metrics": mIOU,
+        "metrics": {"mIoU": mIOU},
+        "visualizer": visualize_segmentation,
     },
 }
 
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     # Setup experiment name
     experiment_name = (
         f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
-        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}_testlog"
     )
 
     if args.use_diffusion:

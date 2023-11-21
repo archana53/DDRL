@@ -105,6 +105,8 @@ def visualize_heatmap(
         x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
         y (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the heatmap.
         y_hat (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the prediction heatmap.
+    Returns:
+        np.ndarray: A tensor of shape (3, height, width) representing the image with heatmaps.
     """
 
     # Convert to numpy array
@@ -129,54 +131,72 @@ def visualize_heatmap(
     return image
 
 
-def visualize_depth(image: torch.Tensor, depth: torch.Tensor) -> np.ndarray:
+def visualize_depth(
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
+) -> np.ndarray:
     """
-    Visualizes depth on an image.
+    Visualizes an RGB image, its depth, and a predicted depth.
 
     Args:
-        image (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the image.
-        depth (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the depth.
-
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the depth.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the predicted depth.
     Returns:
-        torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with depth.
+        np.ndarray: A tensor of shape (3, height, width) representing the image with depth.
     """
 
-    # Convert image to numpy array
-    image = image.cpu().numpy()
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
 
-    # Convert depth to numpy array
-    depth = depth.cpu().numpy()
-    depth = (depth - np.min(depth, axis=(2, 3), keepdims=True)) / (
-        np.max(depth, axis=(2, 3), keepdims=True)
-        - np.min(depth, axis=(2, 3), keepdims=True)
-    )
+    # normalize depths
+    y = (y - np.min(y)) / (np.max(y) - np.min(y))
+    y_hat = (y_hat - np.min(y_hat)) / (np.max(y_hat) - np.min(y_hat))
 
-    return depth
+    # apply colormap to depths
+    cmap = plt.get_cmap("magma")
+    y = cmap(y)[:, :, :, :3]
+    y_hat = cmap(y_hat)[:, :, :, :3]
+    y = np.transpose(y.squeeze(0), (2, 0, 1))
+    y_hat = np.transpose(y_hat.squeeze(0), (2, 0, 1))
+
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image
 
 
 def visualize_segmentation(
-    image: torch.Tensor, segmentation: torch.Tensor
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
 ) -> np.ndarray:
     """
-    Visualizes segmentation on an image.
+    Visualizes an RGB image, a segmentation, and a predicted segmentation.
 
     Args:
-        image (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the image.
-        segmentation (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the segmentation.
-
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, height, width) representing the segmentation.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the predicted segmentation.
     Returns:
-        torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with segmentation.
+        np.ndarray: A tensor of shape (3, height, width) representing the image with segmentation.
     """
 
-    # Convert image to numpy array
-    image = image.cpu().numpy()
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
 
-    # Convert segmentation to numpy array
-    segmentation = segmentation.cpu().numpy()
-    segmentation = np.argmax(segmentation, axis=1)
+    # Convert predicted segmentation to numpy array
+    y_hat = y_hat.argmax(axis=0)
 
-    # map segmentation to colors
+    # apply colormap to segmentation
     cmap = plt.get_cmap("tab20")
-    segmentation = cmap(segmentation)[:, :, :3]
+    y = cmap(y)[:, :, :3]
+    y_hat = cmap(y_hat)[:, :, :3]
+    y = np.transpose(y, (2, 0, 1))
+    y_hat = np.transpose(y_hat, (2, 0, 1))
 
-    return segmentation
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image

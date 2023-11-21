@@ -70,7 +70,9 @@ class PLModelTrainer(pl.LightningModule):
         for key, metric in self.metrics.items():
             self.log(f"val_{key}", metric(y_hat, y))
         if self.visualizer is not None:
-            self.logger.experiment.add_image("val_predictions", self.visualizer(x, y, y_hat), batch_idx)
+            self.logger.experiment.add_image(
+                "val_predictions", self.visualizer(x, y, y_hat), batch_idx
+            )
         return {"loss": loss}
 
     def test_step(self, batch, batch_idx):
