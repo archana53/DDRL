@@ -84,10 +84,9 @@ def heatmap_to_keypoints(heatmap: torch.Tensor) -> torch.Tensor:
     """
 
     # Convert heatmap to numpy array
-    heatmap = heatmap.cpu().numpy()
+    heatmap = heatmap.detach().cpu().numpy()
 
     # Get the x and y coordinates of the keypoints
-    # argmax_indices = np.argmax(heatmap, axis=(2, 3))
     argmax_indices = heatmap.reshape(heatmap.shape[0], heatmap.shape[1], -1).argmax(-1)
     keypoints = np.column_stack(np.unravel_index(argmax_indices, heatmap.shape[2:]))
 
@@ -95,6 +94,39 @@ def heatmap_to_keypoints(heatmap: torch.Tensor) -> torch.Tensor:
     keypoints = torch.tensor(keypoints, dtype=torch.float32)
 
     return keypoints
+
+
+def visualize_heatmap(
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
+) -> np.ndarray:
+    """
+    Visualizes an RGB image, a heatmap, and a prediction heatmap.
+    Args:
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the heatmap.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the prediction heatmap.
+    """
+
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
+
+    # Convert heatmaps to single channel
+    y = np.sum(y, axis=0, keepdims=True)
+    y_hat = np.sum(y_hat, axis=0, keepdims=True)
+
+    # apply colormap to heatmaps
+    cmap = plt.get_cmap("magma")
+    y = cmap(y)[:, :, :, :3]
+    y_hat = cmap(y_hat)[:, :, :, :3]
+    y = np.transpose(y.squeeze(0), (2, 0, 1))
+    y_hat = np.transpose(y_hat.squeeze(0), (2, 0, 1))
+
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image
 
 
 def visualize_depth(image: torch.Tensor, depth: torch.Tensor) -> np.ndarray:

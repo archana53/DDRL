@@ -13,6 +13,7 @@ class PLModelTrainer(pl.LightningModule):
         optimizer,
         timestep=10,
         metrics=None,
+        visualizer=None,
         use_precomputed_features=False,
     ):
         super(PLModelTrainer, self).__init__()
@@ -21,6 +22,7 @@ class PLModelTrainer(pl.LightningModule):
         self.optimizer = optimizer
         self.time_step = torch.LongTensor([timestep])
         self.metrics = metrics
+        self.visualizer = visualizer
         self.use_precomputed_features = use_precomputed_features
         self.backbone = backbone if not use_precomputed_features else None
         self.get_features = (
@@ -57,8 +59,6 @@ class PLModelTrainer(pl.LightningModule):
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
         self.log("train_loss", loss)
-        for key, metric in self.metrics.items():
-            self.log(key, metric(y_hat, y))
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -68,7 +68,9 @@ class PLModelTrainer(pl.LightningModule):
         loss = self.criterion(y_hat, y)
         self.log("val_loss", loss)
         for key, metric in self.metrics.items():
-            self.log(key, metric(y_hat, y))
+            self.log(f"val_{key}", metric(y_hat, y))
+        if self.visualizer is not None:
+            self.logger.experiment.add_image("val_predictions", self.visualizer(x, y, y_hat), batch_idx)
         return {"loss": loss}
 
     def test_step(self, batch, batch_idx):
@@ -78,5 +80,5 @@ class PLModelTrainer(pl.LightningModule):
         loss = self.criterion(y_hat, y)
         self.log("test_loss", loss)
         for key, metric in self.metrics.items():
-            self.log(key, metric(y_hat, y))
+            self.log(f"test_{key}", metric(y_hat, y))
         return {"loss": loss}

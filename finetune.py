@@ -9,13 +9,17 @@ import torch.utils.data as data
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from metrics import MSE, keypoint_MSE, mIOU
-from modules.data.datasets import (CelebAHQMaskDataset, DatasetWithFeatures,
-                                   DepthDataset, KeyPointDataset)
+from modules.data.datasets import (
+    CelebAHQMaskDataset,
+    DatasetWithFeatures,
+    DepthDataset,
+    KeyPointDataset,
+)
 from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
-from modules.ldms import (UnconditionalDiffusionModel,
-                          UnconditionalDiffusionModelConfig)
+from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
+from utils import visualize_heatmap
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -33,6 +37,7 @@ TASK_CONFIG = {
         "criterion": torch.nn.MSELoss,
         "out_channels": 19,
         "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE},
+        "visualizer": visualize_heatmap,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
@@ -309,6 +314,7 @@ if __name__ == "__main__":
         timestep=args.time_step,
         use_precomputed_features=args.use_feature_loader,
         metrics=task_config["metrics"],
+        visualizer=task_config.get("visualizer", None),
     )
 
     # Train the model
