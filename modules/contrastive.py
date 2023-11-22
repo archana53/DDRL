@@ -36,7 +36,7 @@ import numpy as np
 # Path to the folder where the datasets are/should be downloaded (e.g. CIFAR10)
 DATASET_PATH = "../data"
 # Path to the folder where the pretrained models are saved
-CHECKPOINT_PATH = "../saved_models/"
+CHECKPOINT_PATH = "../saved_models"
 # In this notebook, we use data loaders with heavier computational processing. It is recommended to use as many
 # workers as possible in a data loader, which corresponds to the number of CPU cores
 NUM_WORKERS = os.cpu_count()
@@ -75,10 +75,10 @@ class ContrastiveLearning(pl.LightningModule):
 
         assert self.temperature > 0.0, 'The temperature must be a positive float!'
 
-        self.model_config = UnconditionalDiffusionModelConfig()
-        self.model = UnconditionalDiffusionModel(self.model_config)
+        self.model = UnconditionalDiffusionModel(UnconditionalDiffusionModelConfig())
         self.model.set_feature_scales_and_direction(self.scales,self.scale_direction)
-        self.lora_layers = self.model.add_lora_compatibility(4)
+        self.model.add_lora_compatibility(4)
+        #self.lora_layers = self.model.add_lora_compatibility(4)
         self.fc0 = nn.Linear(self.in_channels, self.hidden_channels1)
         self.bn0 = nn.BatchNorm1d(self.hidden_channels1)
         self.fc1 = nn.Linear(self.hidden_channels1, self.hidden_channels2)
@@ -120,8 +120,6 @@ class ContrastiveLearning(pl.LightningModule):
         cos_sim = cos_sim / self.temperature
         nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
         nll = nll.mean()
-        print("###############################################################################################")
-        print(nll)
 
         # Logging loss
         self.log(mode+'_loss', nll)
@@ -164,11 +162,14 @@ class ContrastiveTransformations(object):
     def __call__(self, x):
         return [self.base_transforms(x) for i in range(self.n_views)]
 
-def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kwargs):
+def train_cl(batch_size,unlabeled_data, max_epochs=500, **kwargs):
     trainer = pl.Trainer(
+                         default_root_dir=os.path.join(CHECKPOINT_PATH, 'ContrastiveLearning'),
                          accelerator="gpu" if str(device).startswith("cuda") else "cpu",
                          devices=1,
-                         max_epochs=max_epochs
+                         max_epochs=max_epochs,
+                         callbacks=[ModelCheckpoint(save_weights_only=True, mode='max'),
+                                    LearningRateMonitor('epoch')]
                         )
     trainer.logger._default_hp_metric = None # Optional logging argument that we don't need
 
@@ -180,18 +181,10 @@ def train_cl(batch_size,unlabeled_data,train_data_contrast, max_epochs=500, **kw
     else:
         train_loader = data.DataLoader(unlabeled_data, batch_size=batch_size, shuffle=True,
                                        drop_last=True, pin_memory=True, num_workers=NUM_WORKERS)
-        val_loader = data.DataLoader(train_data_contrast, batch_size=batch_size, shuffle=False,
-                                     drop_last=False, pin_memory=True, num_workers=NUM_WORKERS)
         pl.seed_everything(42) # To be reproducable
         model = ContrastiveLearning(max_epochs=max_epochs, **kwargs)
-        trainer.fit(model, train_loader, val_loader)
-        #trainer.save_checkpoint(pretrained_filename)
-        #model = model = ContrastiveLearning.load_from_checkpoint(pretrained_filename)#ContrastiveLearning.load_from_checkpoint(trainer.checkpoint_callback.best_model_path) # Load best checkpoint after training
-    # cl_model = ContrastiveLearning(max_epochs=max_epochs, **kwargs)
-    # train_loader = data.DataLoader(unlabeled_data, batch_size=batch_size, shuffle=True,drop_last=True, pin_memory=True, num_workers=NUM_WORKERS)
-    # trainer = pl.Trainer()
-    # trainer.fit(model=cl_model, train_dataloaders=train_loader)
-
+        trainer.fit(model, train_loader)
+        model = ContrastiveLearning.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,max_epochs=max_epochs, **kwargs)
 
     return model   
 
@@ -230,15 +223,14 @@ if __name__ == '__main__':
     timestep = 100
     scales = [1,2,3]
     scale_direction = ["up","down"]
-    clr_model = train_cl(batch_size=24,
+    clr_model = train_cl(batch_size=6,
                         unlabeled_data = celeb_data,
-                        train_data_contrast = celeb_data,
                         in_channels=3360,
                         out_channels = 16,
                         lr=5e-4,
                         temperature=0.07,
                         weight_decay=1e-4,
-                        max_epochs=500,
+                        max_epochs=5,
                         hidden_channels1=1024,
                         hidden_channels2=256,
                         timestep = torch.LongTensor([timestep]),
