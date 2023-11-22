@@ -162,7 +162,7 @@ def parse_args():
         "--gpus", type=int, default=1, help="Number of GPUs to use"
     )
     training_group.add_argument(
-        "--num_workers", type=int, default=4, help="Number of workers for dataloader"
+        "--num_workers", type=int, default=5, help="Number of workers for dataloader"
     )
 
     args = parser.parse_args()
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     # Setup experiment name
     experiment_name = (
         f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
-        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}_testlog"
+        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
     )
 
     if args.use_diffusion:
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     # Initialise Logger
     log_dir = f"logs/{experiment_name}"
     logger = WandbLogger(
-        entity=None, project="DDRL", config=args, notes=experiment_name
+        entity="adv-nlp-ldqa", project="DDRL", config=args, notes=experiment_name
     )
 
     # Initialize ModelCheckpoint callback
