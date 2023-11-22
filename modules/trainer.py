@@ -1,7 +1,8 @@
 import pytorch_lightning as pl
 import torch
-
 import torch.nn.functional as F
+
+import wandb
 
 
 class PLModelTrainer(pl.LightningModule):
@@ -58,7 +59,7 @@ class PLModelTrainer(pl.LightningModule):
         features = batch.get("features", None)
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
-        self.log("train_loss", loss)
+        self.log("train/loss", loss)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -66,12 +67,16 @@ class PLModelTrainer(pl.LightningModule):
         features = batch.get("features", None)
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
-        self.log("val_loss", loss)
+        self.log("val/loss", loss)
         for key, metric in self.metrics.items():
-            self.log(f"val_{key}", metric(y_hat, y))
+            self.log(f"val/{key}", metric(y_hat, y))
         if self.visualizer is not None:
-            self.logger.experiment.add_image(
-                "val_predictions", self.visualizer(x, y, y_hat), batch_idx
+            self.logger.experiment.log(
+                {
+                    "val/predictions": wandb.Image(
+                        self.visualizer(x, y, y_hat).transpose(1, 2, 0)
+                    ),
+                }
             )
         return {"loss": loss}
 
@@ -80,7 +85,7 @@ class PLModelTrainer(pl.LightningModule):
         features = batch.get("features", None)
         y_hat = self.forward(x, features=features)
         loss = self.criterion(y_hat, y)
-        self.log("test_loss", loss)
+        self.log("test/loss", loss)
         for key, metric in self.metrics.items():
-            self.log(f"test_{key}", metric(y_hat, y))
+            self.log(f"test/{key}", metric(y_hat, y))
         return {"loss": loss}

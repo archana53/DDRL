@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 import torch.utils.data as data
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 
 from metrics import MSE, keypoint_MSE, mIOU
 from modules.data.datasets import (
@@ -209,6 +210,7 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
             generator=torch.Generator().manual_seed(42),
         )
     datasets = [task_train_dataset, task_val_dataset, task_test_dataset]
+    requires_shuffle = [True, False, False]
 
     # create a DatasetWithFeatures object if using feature loader
     if feature_loader is not None:
@@ -224,14 +226,14 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
         data.DataLoader(
             dataset,
             batch_size=args.batch_size,
-            shuffle=True,
+            shuffle=shuffle,
             num_workers=args.num_workers,
             pin_memory=True,
             prefetch_factor=2,
         )
         if dataset is not None
         else None
-        for dataset in datasets
+        for dataset, shuffle in zip(datasets, requires_shuffle)
     ]
 
     return dataloaders
@@ -285,13 +287,16 @@ if __name__ == "__main__":
 
     # Initialise Logger
     log_dir = f"logs/{experiment_name}"
+    logger = WandbLogger(
+        entity=None, project="DDRL", config=args, notes=experiment_name
+    )
 
     # Initialize ModelCheckpoint callback
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join("checkpoints", experiment_name),
         filename="{epoch}-{val_loss:.2f}",
         save_top_k=3,
-        monitor="val_loss",
+        monitor="val/loss",
         mode="min",
     )
 
@@ -300,6 +305,7 @@ if __name__ == "__main__":
         devices=args.gpus,
         max_steps=args.max_steps,
         default_root_dir=log_dir,
+        logger=logger,
         log_every_n_steps=50,
         val_check_interval=1000,
         callbacks=[checkpoint_callback],
