@@ -41,13 +41,12 @@ class PixelwiseMLPHead(torch.nn.Module):
 
     def forward(self, x):
         batch_size, num_channels, height, width = x.size()
-        x = x.view(batch_size * height * width, num_channels)
-        x = F.relu(self.fc1(x))
-        x = self.bn0(x)
-        x = F.relu(self.fc2(x))
-        x = self.bn1(x)
+        x = x.permute(0, 2, 3, 1)
+        x = x.reshape(batch_size * height * width, num_channels)
+        x = F.relu(self.bn0(self.fc1(x)))
+        x = F.relu(self.bn1(self.fc2(x)))
         x = self.fc3(x)
-        x = x.view(batch_size, height, width, -1)
+        x = x.reshape(batch_size, height, width, -1)
         x = x.permute(0, 3, 1, 2)
         return x
 
