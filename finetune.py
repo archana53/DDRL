@@ -7,7 +7,9 @@ import pytorch_lightning as pl
 import torch
 import torch.utils.data as data
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 
+from metrics import MSE, keypoint_MSE, mIOU
 from modules.data.datasets import (
     CelebAHQMaskDataset,
     DatasetWithFeatures,
@@ -18,7 +20,7 @@ from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
-from modules.metrics import mIOU, MSE
+from utils import visualize_heatmap, visualize_depth, visualize_segmentation
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -26,21 +28,24 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 1,
-        "metrics": MSE,
+        "metrics": {"mse": MSE},
+        "visualizer": visualize_depth,
     },
     "Facial_Keypoint_Detection": {
         "dataloader": KeyPointDataset,
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 19,
-        "metrics": MSE
+        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE},
+        "visualizer": visualize_heatmap,
     },
     "Facial_Segmentation": {
         "dataloader": CelebAHQMaskDataset,
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.CrossEntropyLoss,
         "out_channels": 19,  # 19 classes
-        "metrics": mIOU,
+        "metrics": {"mIoU": mIOU},
+        "visualizer": visualize_segmentation,
     },
 }
 
@@ -205,6 +210,7 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
             generator=torch.Generator().manual_seed(42),
         )
     datasets = [task_train_dataset, task_val_dataset, task_test_dataset]
+    requires_shuffle = [True, False, False]
 
     # create a DatasetWithFeatures object if using feature loader
     if feature_loader is not None:
@@ -220,14 +226,14 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
         data.DataLoader(
             dataset,
             batch_size=args.batch_size,
-            shuffle=True,
+            shuffle=shuffle,
             num_workers=args.num_workers,
             pin_memory=True,
             prefetch_factor=2,
         )
         if dataset is not None
         else None
-        for dataset in datasets
+        for dataset, shuffle in zip(datasets, requires_shuffle)
     ]
 
     return dataloaders
@@ -247,7 +253,7 @@ if __name__ == "__main__":
     # Setup experiment name
     experiment_name = (
         f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
-        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}"
+        f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}_testlog"
     )
 
     if args.use_diffusion:
@@ -274,22 +280,23 @@ if __name__ == "__main__":
     in_features = feature_size[1]
     out_features = task_config["out_channels"]
 
-    task_head = task_config["head"](
-        in_channels=in_features, out_channels=out_features
-    )
+    task_head = task_config["head"](in_channels=in_features, out_channels=out_features)
     task_criterion = task_config["criterion"]()
     all_trainable_params += list(task_head.parameters())
     optimizer = torch.optim.Adam(all_trainable_params, lr=args.lr)
 
     # Initialise Logger
     log_dir = f"logs/{experiment_name}"
+    logger = WandbLogger(
+        entity=None, project="DDRL", config=args, notes=experiment_name
+    )
 
     # Initialize ModelCheckpoint callback
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join("checkpoints", experiment_name),
         filename="{epoch}-{val_loss:.2f}",
         save_top_k=3,
-        monitor="val_loss",
+        monitor="val/loss",
         mode="min",
     )
 
@@ -298,6 +305,7 @@ if __name__ == "__main__":
         devices=args.gpus,
         max_steps=args.max_steps,
         default_root_dir=log_dir,
+        logger=logger,
         log_every_n_steps=50,
         val_check_interval=1000,
         callbacks=[checkpoint_callback],
@@ -312,6 +320,7 @@ if __name__ == "__main__":
         timestep=args.time_step,
         use_precomputed_features=args.use_feature_loader,
         metrics=task_config["metrics"],
+        visualizer=task_config.get("visualizer", None),
     )
 
     # Train the model
@@ -319,4 +328,12 @@ if __name__ == "__main__":
         model_trainer,
         train_dataloaders=task_train_dataloader,
         val_dataloaders=task_val_dataloader,
+    )
+
+    # Test the model
+    trainer.test(
+        model_trainer,
+        dataloaders=task_test_dataloader,
+        ckpt_path=checkpoint_callback.best_model_path,
+        verbose=True,
     )

@@ -6,7 +6,9 @@ import numpy as np
 import torch
 
 
-def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
+def get_majority_vote(
+    predictions: torch.Tensor, threshold: float = 0.5
+) -> torch.Tensor:
     """
     Performs majority voting on a list of predictions.
 
@@ -19,7 +21,11 @@ def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torc
     """
 
     # Convert predictions to binary values based on threshold
-    binary_predictions = torch.where(predictions >= threshold, torch.ones_like(predictions), torch.zeros_like(predictions))
+    binary_predictions = torch.where(
+        predictions >= threshold,
+        torch.ones_like(predictions),
+        torch.zeros_like(predictions),
+    )
 
     # Sum the binary predictions across models
     summed_predictions = binary_predictions.sum(dim=1)
@@ -30,7 +36,9 @@ def get_majority_vote(predictions: torch.Tensor, threshold: float = 0.5) -> torc
     return majority_vote
 
 
-def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], color: str = 'red') -> np.ndarray:
+def visualize_keypoints(
+    image: torch.Tensor, keypoints: List[torch.Tensor], color: str = "red"
+) -> np.ndarray:
     """
     Visualizes keypoints on an image.
 
@@ -42,7 +50,7 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
     Returns:
         torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with keypoints.
     """
-    #TODO: check channels order
+    # TODO: check channels order
 
     # Convert image to numpy array
     image = image.cpu().numpy()
@@ -52,7 +60,6 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
 
     # Iterate over images
     for i in range(image.shape[0]):
-
         # Iterate over keypoints
         for keypoint in keypoints:
             # Get x and y coordinates
@@ -65,51 +72,131 @@ def visualize_keypoints(image: torch.Tensor, keypoints: List[torch.Tensor], colo
     return image
 
 
-def visualize_depth(image: torch.Tensor, depth: torch.Tensor) -> np.ndarray:
+def heatmap_to_keypoints(heatmap: torch.Tensor) -> torch.Tensor:
     """
-    Visualizes depth on an image.
+    Converts a heatmap to a list of keypoints.
 
     Args:
-        image (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the image.
-        depth (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the depth.
+        heatmap (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the heatmap.
 
     Returns:
-        torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with depth.
+        torch.Tensor: A tensors of shape (batch_size, 2) representing the keypoints.
     """
 
-    # Convert image to numpy array
-    image = image.cpu().numpy()
+    # Convert heatmap to numpy array
+    heatmap = heatmap.detach().cpu().numpy()
 
-    # Convert depth to numpy array
-    depth = depth.cpu().numpy()
-    depth = (depth - np.min(depth, axis=(2,3), keepdims=True)) / (
-        np.max(depth, axis=(2,3), keepdims=True) - np.min(depth, axis=(2,3), keepdims=True)
-        )
+    # Get the x and y coordinates of the keypoints
+    argmax_indices = heatmap.reshape(heatmap.shape[0], heatmap.shape[1], -1).argmax(-1)
+    keypoints = np.column_stack(np.unravel_index(argmax_indices, heatmap.shape[2:]))
 
-    return depth
+    # Convert keypoints to tensor
+    keypoints = torch.tensor(keypoints, dtype=torch.float32)
+
+    return keypoints
 
 
-def visualize_segmentation(image: torch.Tensor, segmentation: torch.Tensor) -> np.ndarray:
+def visualize_heatmap(
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
+) -> np.ndarray:
     """
-    Visualizes segmentation on an image.
+    Visualizes an RGB image, a heatmap, and a prediction heatmap.
+    Args:
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the heatmap.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the prediction heatmap.
+    Returns:
+        np.ndarray: A tensor of shape (3, height, width) representing the image with heatmaps.
+    """
+
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
+
+    # Convert heatmaps to single channel
+    y = np.sum(y, axis=0, keepdims=True)
+    y_hat = np.sum(y_hat, axis=0, keepdims=True)
+
+    # apply colormap to heatmaps
+    cmap = plt.get_cmap("magma")
+    y = cmap(y)[:, :, :, :3]
+    y_hat = cmap(y_hat)[:, :, :, :3]
+    y = np.transpose(y.squeeze(0), (2, 0, 1))
+    y_hat = np.transpose(y_hat.squeeze(0), (2, 0, 1))
+
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image
+
+
+def visualize_depth(
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
+) -> np.ndarray:
+    """
+    Visualizes an RGB image, its depth, and a predicted depth.
 
     Args:
-        image (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the image.
-        segmentation (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the segmentation.
-
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the depth.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, 1, height, width) representing the predicted depth.
     Returns:
-        torch.Tensor: A tensor of shape (batch_size, channels, height, width) representing the image with segmentation.
+        np.ndarray: A tensor of shape (3, height, width) representing the image with depth.
     """
 
-    # Convert image to numpy array
-    image = image.cpu().numpy()
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
 
-    # Convert segmentation to numpy array
-    segmentation = segmentation.cpu().numpy()
-    segmentation = np.argmax(segmentation, axis=1)
+    # normalize depths
+    y = (y - np.min(y)) / (np.max(y) - np.min(y))
+    y_hat = (y_hat - np.min(y_hat)) / (np.max(y_hat) - np.min(y_hat))
 
-    # map segmentation to colors
-    cmap = plt.get_cmap('tab20')
-    segmentation = cmap(segmentation)[:, :, :3]
+    # apply colormap to depths
+    cmap = plt.get_cmap("magma")
+    y = cmap(y)[:, :, :, :3]
+    y_hat = cmap(y_hat)[:, :, :, :3]
+    y = np.transpose(y.squeeze(0), (2, 0, 1))
+    y_hat = np.transpose(y_hat.squeeze(0), (2, 0, 1))
 
-    return segmentation
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image
+
+
+def visualize_segmentation(
+    x: torch.Tensor, y: torch.Tensor, y_hat: torch.Tensor
+) -> np.ndarray:
+    """
+    Visualizes an RGB image, a segmentation, and a predicted segmentation.
+
+    Args:
+        x (torch.Tensor): A tensor of shape (batch_size, 3, height, width) representing the RGB image.
+        y (torch.Tensor): A tensor of shape (batch_size, height, width) representing the segmentation.
+        y_hat (torch.Tensor): A tensor of shape (batch_size, channels, height, width) representing the predicted segmentation.
+    Returns:
+        np.ndarray: A tensor of shape (3, height, width) representing the image with segmentation.
+    """
+
+    # Convert to numpy array
+    x = x[0].cpu().numpy()
+    y = y[0].cpu().numpy()
+    y_hat = y_hat[0].cpu().numpy()
+
+    # Convert predicted segmentation to numpy array
+    y_hat = y_hat.argmax(axis=0)
+
+    # apply colormap to segmentation
+    cmap = plt.get_cmap("tab20")
+    y = cmap(y)[:, :, :3]
+    y_hat = cmap(y_hat)[:, :, :3]
+    y = np.transpose(y, (2, 0, 1))
+    y_hat = np.transpose(y_hat, (2, 0, 1))
+
+    # Concatenate images
+    image = np.concatenate([x, y, y_hat], axis=2)
+
+    return image
