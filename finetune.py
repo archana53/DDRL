@@ -9,7 +9,7 @@ import torch.utils.data as data
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
-from metrics import MSE, keypoint_MSE, mIOU
+from metrics import MSE, keypoint_MSE, mIOU, weighted_heatmap_MSE
 from modules.data.datasets import (
     CelebAHQMaskDataset,
     DatasetWithFeatures,
@@ -36,7 +36,7 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 19,
-        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE},
+        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE, "weighted_heatmap_mse": weighted_heatmap_MSE()},
         "visualizer": visualize_heatmap,
     },
     "Facial_Segmentation": {

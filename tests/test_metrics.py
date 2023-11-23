@@ -5,7 +5,7 @@ import sys
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 import torch
-from metrics import mIOU, MSE, keypoint_MSE
+from metrics import mIOU, MSE, keypoint_MSE, weighted_heatmap_MSE
 
 
 class TestMetrics(unittest.TestCase):
@@ -24,6 +24,11 @@ class TestMetrics(unittest.TestCase):
         test_pred = torch.rand(1, 19, 256, 256)
         keypoint_mse = keypoint_MSE(test_pred, test_pred)
         self.assertAlmostEqual(keypoint_mse, 0, places=2)
+
+    def test_weighted_heatmap_MSE(self):
+        test_pred = torch.rand(1, 19, 256, 256)
+        keypoint_weighted_mse = weighted_heatmap_MSE(test_pred, test_pred)
+        self.assertAlmostEqual(keypoint_weighted_mse, 0, places=2)
 
 
 if __name__ == "__main__":

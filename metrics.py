@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from utils import heatmap_to_keypoints
 
@@ -48,3 +49,22 @@ def keypoint_MSE(y_pred, y_true):
     y_pred = heatmap_to_keypoints(y_pred)
     y_true = heatmap_to_keypoints(y_true)
     return torch.mean((y_true - y_pred) ** 2)
+
+
+def weighted_heatmap_MSE(y_pred, y_true, threshold=0.2, weight_value=10.0):
+    """
+    Computes the mean squared error (MSE) metric for keypoint estimation by weighting the class imbalanced keypoints
+    loss higher.
+    Extracts keypoints from the heatmap and computes the MSE on coordinates.
+    Args:
+        y_pred (torch.Tensor): Predicted keypoint heat map of shape (batch_size, 1, height, width).
+        y_true (torch.Tensor): Ground truth heat map of shape (batch_size, 1, height, width).
+    Returns:
+        float: Mean squared error (MSE) score after weighting loss of values > threshold.
+    """
+    # weight map creation
+    weight = y_true > threshold
+    weight = weight.float() * weight_value
+
+    # weighted loss
+    return torch.mean(F.mse_loss(y_pred, y_true, reduction='none') * weight)
