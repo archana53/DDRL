@@ -36,7 +36,7 @@ TASK_CONFIG = {
         "head": PixelwiseMLPHead,
         "criterion": torch.nn.MSELoss,
         "out_channels": 19,
-        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE, "weighted_heatmap_mse": weighted_heatmap_MSE()},
+        "metrics": {"heatmap_mse": MSE, "keypoint_mse": keypoint_MSE, "weighted_heatmap_mse": weighted_heatmap_MSE},
         "visualizer": visualize_heatmap,
     },
     "Facial_Segmentation": {
