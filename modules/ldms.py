@@ -26,11 +26,18 @@ class UnconditionalDiffusionModel(nn.Module):
         self.vqvae = self.pipe.vqvae
         self.num_diffusion_steps = config.num_diffusion_steps
         self.latent = True
+        self.up_sample = False
+        self.down_sample = True
 
         # temporary configs
         self.resolution = (256, 256)
+        self.up_resolution = (64, 64)
         self.center_crop = True
         self.random_flip = False
+
+        # if self.vqvae is not None:
+        #     self.vqvae.requires_grad_(False)
+        # self.unet.requires_grad_(False)
 
         self.image_transforms = transforms.Compose(
             [
@@ -87,6 +94,7 @@ class UnconditionalDiffusionModel(nn.Module):
             torch.LongTensor([10]),
         )[1].size()
         self.feature_size = sample_feature_size
+        return self.feature_size
 
     def get_features(self, x, t):
         if self.latent:  # Convert to latent space
@@ -106,13 +114,19 @@ class UnconditionalDiffusionModel(nn.Module):
         intermediate_features = [
             i[0] if isinstance(i, tuple) else i for i in intermediate_features
         ]
-        # upscale to original dimension of the image
-        for i in range(len(intermediate_features)):
-            intermediate_features[i] = F.interpolate(
-                intermediate_features[i], size=self.resolution, mode="bilinear"
-            )
-
-        final_intermediate_features = torch.cat(intermediate_features, dim=1)
+        #upscale to original dimension of the image
+        if self.up_sample:
+            for i in range(len(intermediate_features)):
+                intermediate_features[i] = F.interpolate(
+                    intermediate_features[i], size=self.up_resolution, mode="bilinear"
+                )
+        downsample = []
+        if self.down_sample:
+            for i in range(len(intermediate_features)):
+                kernel = int(intermediate_features[i].shape[3])
+                stride = kernel
+                intermediate_features[i] = F.avg_pool2d(intermediate_features[i],kernel_size = kernel, stride=stride)
+        final_intermediate_features = torch.cat(intermediate_features, axis=1)
         return noisy_pred, final_intermediate_features
 
     def add_lora_compatibility(self, lora_rank):
