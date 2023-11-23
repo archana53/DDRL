@@ -156,6 +156,12 @@ def parse_args():
         "--precision", type=str, default="32-true", help="Precision for training"
     )
     training_group.add_argument(
+        "--val_check_interval",
+        type=int,
+        default=1000,
+        help="Number of steps to check validation",
+    )
+    training_group.add_argument(
         "--max_steps", type=int, default=30000, help="Number of steps to train for"
     )
     training_group.add_argument(
@@ -307,7 +313,7 @@ if __name__ == "__main__":
         default_root_dir=log_dir,
         logger=logger,
         log_every_n_steps=50,
-        val_check_interval=1000,
+        val_check_interval=args.val_check_interval,
         callbacks=[checkpoint_callback],
     )
 
