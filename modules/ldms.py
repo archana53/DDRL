@@ -35,9 +35,9 @@ class UnconditionalDiffusionModel(nn.Module):
         self.center_crop = True
         self.random_flip = False
 
-        if self.vqvae is not None:
-            self.vqvae.requires_grad_(False)
-        self.unet.requires_grad_(False)
+        # if self.vqvae is not None:
+        #     self.vqvae.requires_grad_(False)
+        # self.unet.requires_grad_(False)
 
         self.image_transforms = transforms.Compose(
             [
@@ -94,6 +94,7 @@ class UnconditionalDiffusionModel(nn.Module):
             torch.LongTensor([10]),
         )[1].size()
         self.feature_size = sample_feature_size
+        return self.feature_size
 
     def get_features(self, x, t):
         if self.latent:  # Convert to latent space

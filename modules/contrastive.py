@@ -214,13 +214,16 @@ def train_cl(batch_size, unlabeled_data, train_data_contrast,lora_rank,lr,checkp
 
         diff_model_config = UnconditionalDiffusionModelConfig()
         diff_model = UnconditionalDiffusionModel(diff_model_config)
+        inc = diff_model.set_feature_scales_and_direction(kwargs['scales'],kwargs['scale_direction'])[1]
         lora_layers = diff_model.add_lora_compatibility(lora_rank)
         head = ContrastiveHead(
-            in_channels=4480,
-            out_channels=16,
-        )
+            in_channels=inc,
+            out_channels=64,
+        ) 
         optimizer = optim.Adam(
-            lora_layers.parameters(),
+            [{'params':lora_layers.parameters()},
+             {'params':head.parameters()},
+             ],
             lr=lr,
         )
         model = ContrastiveLearning(
@@ -291,7 +294,7 @@ def parse_args():
     diffusion_group.add_argument(
         "--time_step",
         type=int,
-        default=50,
+        default=200,
         help="Features extracted from which time step",
     )
 
