@@ -119,6 +119,12 @@ def parse_args():
     # Downstream Task parameters
     task_group = parser.add_argument_group("task_args")
     task_group.add_argument(
+        "--analysis",
+        type=str,
+        default=None,
+        help="Analysis to run. One of: t (timestep), b (block)",
+    )
+    task_group.add_argument(
         "--name",
         type=str,
         default="Depth_Estimation",
@@ -163,6 +169,12 @@ def parse_args():
     )
     training_group.add_argument(
         "--max_steps", type=int, default=30000, help="Number of steps to train for"
+    )
+    training_group.add_argument(
+        "--limit_train_data",
+        type=float,
+        default=1.0,
+        help="Limit training data to train on reduced dataset. Helpful to understand few-shot performance",
     )
     training_group.add_argument(
         "--gpus", type=int, default=1, help="Number of GPUs to use"
@@ -213,6 +225,12 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
         task_train_dataset, task_val_dataset, task_test_dataset = data.random_split(
             task_dataset,
             [0.8, 0.2 * 0.33, 0.2 * 0.67],
+            generator=torch.Generator().manual_seed(42),
+        )
+    if args.limit_train_data < 1.0:
+        task_train_dataset, _ = data.random_split(
+            task_train_dataset,
+            [args.limit_train_data, 1 - args.limit_train_data],
             generator=torch.Generator().manual_seed(42),
         )
     datasets = [task_train_dataset, task_val_dataset, task_test_dataset]
@@ -293,8 +311,23 @@ if __name__ == "__main__":
 
     # Initialise Logger
     log_dir = f"logs/{experiment_name}"
+    if args.name == "Facial_Segmentation":
+        expt_prefix = "segmentation_"
+    elif args.name == "Facial_Keypoint_Detection":
+        expt_prefix = "keypoint_"
+
+    expt_name = None
+    if args.analysis == "t":
+        expt_name = f"{expt_prefix}t{args.time_step}"
+    elif args.analysis == "b":
+        expt_name = f"{expt_prefix}b{args.scale_direction[0][0]}{args.scales[0]}"
+
     logger = WandbLogger(
-        entity="adv-nlp-ldqa", project="DDRL", config=args, notes=experiment_name
+        name=expt_name,
+        entity="adv-nlp-ldqa",
+        project="DDRL",
+        config=args,
+        notes=experiment_name,
     )
 
     # Initialize ModelCheckpoint callback
