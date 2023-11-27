@@ -20,7 +20,9 @@ from modules.decoders import PixelwiseMLPHead
 from modules.feature_loader import FeatureLoader
 from modules.ldms import UnconditionalDiffusionModel, UnconditionalDiffusionModelConfig
 from modules.trainer import PLModelTrainer
+from modules.contrastive import ContrastiveLearning, ContrastiveHead
 from utils import visualize_heatmap, visualize_depth, visualize_segmentation
+from torch import optim
 
 TASK_CONFIG = {
     "Depth_Estimation": {
@@ -59,9 +61,7 @@ def parse_args():
     feature_extraction_group = parser.add_argument_group("Feature Extraction Arguments")
 
     # Diffusion or Feature Loader in a mutually exclusive group
-    extraction_method_specifc_group = (
-        feature_extraction_group.add_mutually_exclusive_group()
-    )
+    extraction_method_specifc_group = feature_extraction_group.add_mutually_exclusive_group()
     extraction_method_specifc_group.add_argument(
         "--use_diffusion",
         "-d",
@@ -82,9 +82,7 @@ def parse_args():
         action="store_true",
         help="Conditional/Unconditional Diffusion",
     )
-    feature_extraction_group.add_argument(
-        "--model_path", type=str, help="Path to model"
-    )
+    feature_extraction_group.add_argument("--model_path", type=str, help="Path to model")
 
     # Feature Loader Parameters
     feature_extraction_group.add_argument(
@@ -112,7 +110,7 @@ def parse_args():
     feature_extraction_group.add_argument(
         "--time_step",
         type=int,
-        default=100,
+        default=200,
         help="Features extracted from which time step",
     )
 
@@ -142,13 +140,9 @@ def parse_args():
         action="store_true",
         help="If true, finetune diffusion model as well",
     )
-    training_group.add_argument(
-        "--lora_rank", type=int, default=4, help="Rank of LoRA layer"
-    )
-    training_group.add_argument(
-        "--optimizer", type=str, default="Adam", help="Optimizer to use"
-    )
-    training_group.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    training_group.add_argument("--lora_rank", type=int, default=4, help="Rank of LoRA layer")
+    training_group.add_argument("--optimizer", type=str, default="Adam", help="Optimizer to use")
+    training_group.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
     training_group.add_argument(
         "--batch_size", type=int, default=16, help="Batch size for training"
     )
@@ -156,11 +150,9 @@ def parse_args():
         "--precision", type=str, default="32-true", help="Precision for training"
     )
     training_group.add_argument(
-        "--max_steps", type=int, default=30000, help="Number of steps to train for"
+        "--max_steps", type=int, default=10000, help="Number of steps to train for"
     )
-    training_group.add_argument(
-        "--gpus", type=int, default=1, help="Number of GPUs to use"
-    )
+    training_group.add_argument("--gpus", type=int, default=1, help="Number of GPUs to use")
     training_group.add_argument(
         "--num_workers", type=int, default=4, help="Number of workers for dataloader"
     )
@@ -172,9 +164,32 @@ def parse_args():
 def setup_diffusion_model(args, device):
     if args.conditional:
         raise ValueError("Conditional Diffusion Models not supported yet")
+    elif args.model_path:
+        diff_model_config = UnconditionalDiffusionModelConfig()
+        diff_model = UnconditionalDiffusionModel(diff_model_config)
+        lora_layers = diff_model.add_lora_compatibility(args.lora_rank)
+        checkpoint = torch.load(args.model_path)
+        new_state_dict = {}
+        for key in checkpoint["state_dict"].keys():
+            if key.startswith("backbone."):
+                new_key = key[len("backbone.") :]
+                new_key = new_key.replace(".to_q.lora_layer.", ".processor.to_q_lora.")
+                new_key = new_key.replace(".to_k.lora_layer.", ".processor.to_k_lora.")
+                new_key = new_key.replace(".to_v.lora_layer.", ".processor.to_v_lora.")
+                new_key = new_key.replace(".to_out.0.lora_layer.", ".processor.to_out_lora.")
+                new_state_dict[new_key] = checkpoint["state_dict"][key]
+        diff_model.load_state_dict(new_state_dict)
+        del new_state_dict
+        del checkpoint
+        model = diff_model
+        for params in model.parameters():
+            params.requires_grad = False
+
     else:
         model_config = UnconditionalDiffusionModelConfig()
         model = UnconditionalDiffusionModel(model_config)
+        for params in model.parameters():
+            params.requires_grad = False
 
     model.set_feature_scales_and_direction(args.scales, args.scale_direction)
     return model
@@ -215,9 +230,7 @@ def setup_dataloaders(dataset_cls, args, feature_loader=None):
     # create a DatasetWithFeatures object if using feature loader
     if feature_loader is not None:
         datasets = [
-            DatasetWithFeatures(dataset, feature_loader)
-            if dataset is not None
-            else None
+            DatasetWithFeatures(dataset, feature_loader) if dataset is not None else None
             for dataset in datasets
         ]
 
@@ -252,7 +265,7 @@ if __name__ == "__main__":
 
     # Setup experiment name
     experiment_name = (
-        f"{args.name}_timestep={args.time_step}_scales={args.scales}_"
+        f"{args.name}_contrastive_timestep={args.time_step}_scales={args.scales}_"
         f"scaledir={args.scale_direction}_lr={args.lr}_batchsize={args.batch_size}_testlog"
     )
 
@@ -264,7 +277,7 @@ if __name__ == "__main__":
             lora_layers = model.add_lora_compatibility(args.lora_rank)
             all_trainable_params = list(lora_layers.parameters())
 
-    else:  # args.use_feature_loader:
+    elif args.use_feature_loader:  # args.use_feature_loader:
         feature_loader = setup_feature_loader(args)
         feature_size = feature_loader.feature_size
 
@@ -287,9 +300,7 @@ if __name__ == "__main__":
 
     # Initialise Logger
     log_dir = f"logs/{experiment_name}"
-    logger = WandbLogger(
-        entity=None, project="DDRL", config=args, notes=experiment_name
-    )
+    logger = WandbLogger(entity=None, project="DDRL", config=args, notes=experiment_name)
 
     # Initialize ModelCheckpoint callback
     checkpoint_callback = ModelCheckpoint(
@@ -307,7 +318,7 @@ if __name__ == "__main__":
         default_root_dir=log_dir,
         logger=logger,
         log_every_n_steps=50,
-        val_check_interval=1000,
+        val_check_interval=30,
         callbacks=[checkpoint_callback],
     )
 
